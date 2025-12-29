@@ -4,17 +4,39 @@ import { GeneratedImage, StickerConfig, InputMode, StickerType, FontConfig, Shee
 import { stripMimeType, getMimeType, wait } from "./utils";
 
 // Model Definitions
-const IP_DESIGN_MODEL = 'gemini-3-pro-image-preview'; 
-const STICKER_GEN_MODEL_PRO = 'gemini-3-pro-image-preview'; 
-const STICKER_GEN_MODEL_FLASH = 'gemini-2.5-flash-image';   
+const IP_DESIGN_MODEL = 'gemini-3-pro-image-preview';
+const STICKER_GEN_MODEL_PRO = 'gemini-3-pro-image-preview';
+const STICKER_GEN_MODEL_FLASH = 'gemini-2.5-flash-image';
 const TEXT_MODEL = 'gemini-3-flash-preview';
 const VALIDATION_MODEL = 'gemini-2.5-flash-image'; // Used for QA check
 
 // Helper to get a fresh AI instance with the current key
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+let dynamicApiKey = '';
+
+export const setApiKey = (key: string) => {
+    dynamicApiKey = key;
+    if (typeof window !== 'undefined') {
+        localStorage.setItem('gemini_api_key', key);
+    }
+};
+
+export const getApiKey = () => {
+    if (dynamicApiKey) return dynamicApiKey;
+    if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('gemini_api_key');
+        if (stored) return stored;
+    }
+    return process.env.VITE_GEMINI_API_KEY || process.env.API_KEY || ''; // Fallback to env
+};
+
+const getAI = () => {
+    const key = getApiKey();
+    if (!key) throw new Error("API Key Missing");
+    return new GoogleGenAI({ apiKey: key });
+};
 
 async function callWithRetry<T>(apiCall: () => Promise<T>, retries: number = 2, delay: number = 2000): Promise<T> {
-    try { return await apiCall(); } 
+    try { return await apiCall(); }
     catch (error: any) {
         if (retries > 0 && (error?.status === 429 || error?.status === 503 || error?.message?.includes("overloaded"))) {
             await wait(delay);
@@ -61,7 +83,7 @@ const validateImageDimensions = async (dataUrl: string, targetRatio: number): Pr
  */
 const validateStickerSheetViaVision = async (base64Image: string): Promise<{ passed: boolean; reason: string }> => {
     const ai = getAI();
-    
+
     const validationPrompt = `
     Act as a strict QA Specialist for LINE Stickers. Analyze this sprite sheet image.
     
@@ -99,10 +121,10 @@ const validateStickerSheetViaVision = async (base64Image: string): Promise<{ pas
                 }
             }
         });
-        
+
         const text = response.text?.replace(/```json\n?|\n?```/g, '') || "{}";
         const result = JSON.parse(text);
-        
+
         console.log(`[Vision Validator]`, result);
         return {
             passed: result.passed === true,
@@ -114,12 +136,12 @@ const validateStickerSheetViaVision = async (base64Image: string): Promise<{ pas
     }
 };
 
-export const parseStickerIdeas = async (rawText: string, includeText: boolean = true): Promise<{text: string, emotionPromptCN: string, emotionPrompt: string}[]> => {
+export const parseStickerIdeas = async (rawText: string, includeText: boolean = true): Promise<{ text: string, emotionPromptCN: string, emotionPrompt: string }[]> => {
     const ai = getAI();
 
     // Add explicit text instruction if includeText is false
-    const textInstruction = includeText 
-        ? '- "text": The clean caption text (e.g., "早安").' 
+    const textInstruction = includeText
+        ? '- "text": The clean caption text (e.g., "早安").'
         : '- "text": FORCE EMPTY STRING "". (User requested NO TEXT).';
 
     const prompt = `
@@ -156,16 +178,16 @@ export const parseStickerIdeas = async (rawText: string, includeText: boolean = 
         const response = await ai.models.generateContent({
             model: TEXT_MODEL,
             contents: { parts: [{ text: prompt }] },
-            config: { 
+            config: {
                 responseMimeType: "application/json",
                 responseSchema: {
                     type: Type.ARRAY,
                     items: {
                         type: Type.OBJECT,
-                        properties: { 
-                            text: { type: Type.STRING }, 
+                        properties: {
+                            text: { type: Type.STRING },
                             emotionPromptCN: { type: Type.STRING },
-                            emotionPrompt: { type: Type.STRING } 
+                            emotionPrompt: { type: Type.STRING }
                         }
                     }
                 }
@@ -191,7 +213,7 @@ export const translateActionToEnglish = async (cnText: string): Promise<string> 
     - Style: Cute, Chibi.
     - Output ONLY the English text.
     `;
-    
+
     return callWithRetry(async () => {
         const response = await ai.models.generateContent({
             model: TEXT_MODEL,
@@ -226,7 +248,7 @@ export const generateVisualDescription = async (concept: string): Promise<string
             model: TEXT_MODEL,
             contents: { parts: [{ text: prompt }] },
         });
-        
+
         validateResponse(response);
         return response.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
     });
@@ -242,14 +264,14 @@ export const generateStickerPackageInfo = async (mainImageUrl: string, stickerTe
     - Write exactly **ONE concise sentence**.
     - Example: "Express your daily moods with these cute and funny characters."
     `;
-    
+
     return callWithRetry(async () => {
         const response = await ai.models.generateContent({
             model: TEXT_MODEL,
-            contents: { 
-                parts: [{ inlineData: { mimeType: 'image/png', data: stripMimeType(mainImageUrl) } }, { text: prompt }] 
+            contents: {
+                parts: [{ inlineData: { mimeType: 'image/png', data: stripMimeType(mainImageUrl) } }, { text: prompt }]
             },
-            config: { 
+            config: {
                 responseMimeType: "application/json",
                 responseSchema: {
                     type: Type.OBJECT,
@@ -266,7 +288,7 @@ export const generateStickerPackageInfo = async (mainImageUrl: string, stickerTe
 
 export const generateIPCharacter = async (sourceImageDataUrl: string, style: string, inputMode: InputMode, variationSeed: number): Promise<GeneratedImage> => {
     const ai = getAI();
-    
+
     // Updated IP Character Prompt: FULL BODY + 15px BORDER
     const coreRequirements = `Create a "Character Design Sheet" on solid green (#00FF00). Show Front, Side, and Action. Style: ${style}. 
     
@@ -285,17 +307,17 @@ export const generateIPCharacter = async (sourceImageDataUrl: string, style: str
        - Add a consistent **Extra Thick (15px) Solid WHITE sticker outline** around each figure.
        - **ENSURE FULL BODY VISIBILITY.**
     `;
-    
+
     let parts: any[] = [];
     if (inputMode === 'TEXT_PROMPT') {
         parts = [{ text: `Create unique IP character: "${sourceImageDataUrl}".\n${coreRequirements}` }];
     } else {
         parts = [{ inlineData: { mimeType: getMimeType(sourceImageDataUrl), data: stripMimeType(sourceImageDataUrl) } }, { text: `Transform IP character.\n${coreRequirements}` }];
     }
-    
+
     return callWithRetry(async () => {
-        const response = await ai.models.generateContent({ 
-            model: IP_DESIGN_MODEL, 
+        const response = await ai.models.generateContent({
+            model: IP_DESIGN_MODEL,
             contents: { parts },
             config: { imageConfig: { aspectRatio: "1:1" } }
         });
@@ -332,11 +354,11 @@ export const analyzeImageForCharacterDescription = async (base64Image: string): 
     return callWithRetry(async () => {
         const response = await ai.models.generateContent({
             model: STICKER_GEN_MODEL_FLASH, // Flash is sufficient for vision analysis
-            contents: { 
+            contents: {
                 parts: [
-                    { inlineData: { mimeType: getMimeType(base64Image), data: stripMimeType(base64Image) } }, 
+                    { inlineData: { mimeType: getMimeType(base64Image), data: stripMimeType(base64Image) } },
                     { text: prompt }
-                ] 
+                ]
             },
         });
         validateResponse(response);
@@ -380,17 +402,17 @@ export const generateCharacterDescriptionFromKeyword = async (keyword: string): 
  */
 export const generateRandomCharacterPrompt = async (type: 'ANIMAL' | 'PERSON', keyword?: string): Promise<string> => {
     const ai = getAI();
-    
+
     let prompt = `隨機描述一個適合 Line 貼圖的可愛 IP 角色 (${type === 'ANIMAL' ? '動物' : '人物'})。`;
-    
+
     if (keyword && keyword.trim() !== '') {
         prompt += `\n**重點主題/特徵：${keyword}** (請務必在設計中融合此元素，例如：龐克風、珍珠奶茶、愛心...)。`;
     }
-    
+
     prompt += ` 繁體中文，50-80字。描述外觀、顏色、配件。`;
 
     const response = await ai.models.generateContent({
-        model: TEXT_MODEL, contents: { parts: [{ text: prompt }] }, config: { temperature: 1.2 } 
+        model: TEXT_MODEL, contents: { parts: [{ text: prompt }] }, config: { temperature: 1.2 }
     });
     return response.text || "";
 };
@@ -405,16 +427,16 @@ export const generateGroupCharacterSheet = async (
 ): Promise<GeneratedImage> => {
     const ai = getAI();
     const parts: any[] = [];
-    
+
     // 1. Image Processing & Source Analysis
     let sourceAnalysis = "";
-    
+
     // Check if any character has an image
     const validImages = characters.filter(c => c.image);
-    
+
     if (validImages.length > 0) {
         sourceAnalysis = "**SOURCE IMAGE ANALYSIS (CRITICAL):**\n";
-        
+
         // Add images to the API call
         validImages.forEach((c, index) => {
             parts.push({ inlineData: { mimeType: getMimeType(c.image!), data: stripMimeType(c.image!) } });
@@ -422,26 +444,26 @@ export const generateGroupCharacterSheet = async (
             // Note: inlineData parts come first in the array, so index 0 matches Part 0
             sourceAnalysis += `- **Reference Image ${index + 1}** corresponds to **Character ${characters.findIndex(char => char.id === c.id) + 1}** (${c.description}).\n`;
         });
-        
+
         sourceAnalysis += `
         - **IDENTITY MAPPING RULE:** You must strictly map the provided reference images to their specific character slot.
         - **SEPARATION RULE:** If a reference image contains multiple people (e.g. a group photo), you must MENTALLY ISOLATE the specific person matching the description. Do NOT mix features between characters.
         `;
     } else {
-         sourceAnalysis = "**SOURCE ANALYSIS:** No reference images provided. Generate based strictly on text descriptions.";
+        sourceAnalysis = "**SOURCE ANALYSIS:** No reference images provided. Generate based strictly on text descriptions.";
     }
 
     // 2. Dynamic Left Column Prompt (Individual Panels)
     const leftColumnPrompt = characters.map((c, i) => `
-    **[PANEL ${i+1}] LEFT COLUMN ROW ${i+1} (Character ${i+1})**
-    - **SUBJECT:** ONLY Character ${i+1} (${c.description}).
+    **[PANEL ${i + 1}] LEFT COLUMN ROW ${i + 1} (Character ${i + 1})**
+    - **SUBJECT:** ONLY Character ${i + 1} (${c.description}).
     - **CONSTRAINT:** Other characters (Character ${characters.filter((_, idx) => idx !== i).map((_, idx) => idx + 1).join(', ')}) must NOT appear in this panel.
-    - **CONTENT:** Draw 3 distinct facial expressions of Character ${i+1} (e.g., Front, Side, Happy).
+    - **CONTENT:** Draw 3 distinct facial expressions of Character ${i + 1} (e.g., Front, Side, Happy).
     - **FOCUS:** FULL BODY (Head to Toe). Scale down to fit the cell height. Do NOT crop feet.
     `).join('\n');
 
     // 3. Right Column Prompt (Group Interaction)
-    const charListString = characters.map((c, i) => `Character ${i+1}`).join(' + ');
+    const charListString = characters.map((c, i) => `Character ${i + 1}`).join(' + ');
 
     const systemPrompt = `
     ${sourceAnalysis}
@@ -477,21 +499,21 @@ export const generateGroupCharacterSheet = async (
         const response = await ai.models.generateContent({
             model: STICKER_GEN_MODEL_PRO, // Use Pro for complex layout adherence and 4K
             contents: { parts },
-            config: { 
-                imageConfig: { 
+            config: {
+                imageConfig: {
                     aspectRatio: "16:9",
                     imageSize: "4K"
-                } 
+                }
             }
         });
         validateResponse(response);
         const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (!part?.inlineData?.data) throw new Error("No image data.");
-        
-        return { 
-            id: `group-${Date.now()}`, 
-            url: `data:image/png;base64,${part.inlineData.data}`, 
-            type: 'STATIC' 
+
+        return {
+            id: `group-${Date.now()}`,
+            url: `data:image/png;base64,${part.inlineData.data}`,
+            type: 'STATIC'
         };
     });
 };
@@ -499,10 +521,10 @@ export const generateGroupCharacterSheet = async (
 export const generateStickerSheet = async (characterUrl: string, configs: StickerConfig[], style: string, sheetIndex: number, totalSheets: number, layout?: SheetLayout, fontConfig?: FontConfig): Promise<{ url: string }> => {
     const ai = getAI();
     const base64Char = stripMimeType(characterUrl);
-    
+
     const cols = layout?.cols || 4;
     const rows = layout?.rows || 2;
-    
+
     // Simple aspect ratio logic for Static
     const ratioVal = cols / rows;
     const supportedRatios: { ar: "1:1" | "3:4" | "4:3" | "9:16" | "16:9", val: number }[] = [
@@ -511,7 +533,7 @@ export const generateStickerSheet = async (characterUrl: string, configs: Sticke
     const bestAR = supportedRatios.reduce((prev, curr) => Math.abs(curr.val - ratioVal) < Math.abs(prev.val - ratioVal) ? curr : prev).ar;
     const targetRatio = supportedRatios.find(r => r.ar === bestAR)?.val || 1.0;
 
-    const gridInstructions = configs.map((c, i) => `   - Cell ${i+1}: Action "${c.emotionPrompt}". ${c.showText ? `TEXT: "${c.text}" (Interact with this text!)` : "NO TEXT"}.`).join('\n');
+    const gridInstructions = configs.map((c, i) => `   - Cell ${i + 1}: Action "${c.emotionPrompt}". ${c.showText ? `TEXT: "${c.text}" (Interact with this text!)` : "NO TEXT"}.`).join('\n');
 
     const basePrompt = `
     Grid Specification: ${cols} columns x ${rows} rows.
@@ -567,7 +589,7 @@ export const generateStickerSheet = async (characterUrl: string, configs: Sticke
             const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
             if (!part?.inlineData?.data) throw new Error("No data");
             const finalUrl = `data:image/png;base64,${part.inlineData.data}`;
-            
+
             // Level 1 Check
             const valid = await validateImageDimensions(finalUrl, targetRatio);
             if (valid) return { url: finalUrl };
@@ -584,7 +606,7 @@ export const generateStickerSheet = async (characterUrl: string, configs: Sticke
 export const editSticker = async (markedImage: string, prompt: string): Promise<GeneratedImage> => {
     const ai = getAI();
     const base64Data = stripMimeType(markedImage);
-    
+
     // Updated Inpainting Prompt: Explicitly instruct NOT to just remove red marks, but to GENERATE CONTENT.
     const editPrompt = `
     [INPAINTING TASK]
@@ -599,7 +621,7 @@ export const editSticker = async (markedImage: string, prompt: string): Promise<
     4. **BACKGROUND**: Keep the background Pure Green (#00FF00).
     5. **COLOR SAFETY**: Do NOT use bright green in the new content. If generating effects, fade to WHITE, not green.
     `;
-    
+
     // Pro -> Flash Fallback
     try {
         const response = await ai.models.generateContent({
@@ -628,9 +650,9 @@ export const restyleSticker = async (imageUrl: string, filter: ArtisticFilterTyp
     if (filter === 'ORIGINAL') return { id: 'orig', url: imageUrl, type: 'STATIC' };
     const ai = getAI();
     const prompt = `Redraw in ${filter} style. Maintain pose/comp. Keep 15px white border.`;
-    
+
     const response = await ai.models.generateContent({
-        model: STICKER_GEN_MODEL_FLASH, 
+        model: STICKER_GEN_MODEL_FLASH,
         contents: { parts: [{ inlineData: { mimeType: 'image/png', data: stripMimeType(imageUrl) } }, { text: prompt }] },
         config: { imageConfig: {} }
     });

@@ -18,17 +18,17 @@
 npm install
 ```
 
-### 2. 設定環境變數 (Environment Variables)
-為了安全起見，API Key 不應直接寫在程式碼中。請在專案根目錄建立 `.env.local` 檔案：
+### 2. 設定 Environment Variables (可選)
+本專案支援兩種 API Key 輸入方式：
+1. **介面輸入 (推薦)**：直接啟動網頁，在首頁 Landing Page 輸入您的 Gemini API Key。Key 會儲存在瀏覽器的 `localStorage` 中，不會上傳至伺服器。
+2. **環境變數 (開發用)**：您也可以在專案根目錄建立 `.env.local` 檔案來預設 Key：
 
 ```bash
 # .env.local
 VITE_GEMINI_API_KEY=你的_Google_Gemini_API_Key
 ```
 
-**注意**：
-- 此專案的 `.gitignore` 已設定忽略 `.env` 相關檔案，請確保不要強制提交這些檔案。
-- 前端專案中的 API Key 在建置後會暴露給使用者，僅建議在個人專案或受信任環境使用，或搭配後端 Proxy 隱藏 Key。
+**注意**：此專案的 `.gitignore` 已設定忽略 `.env` 相關檔案。
 
 ### 3. 啟動開發伺服器
 ```bash
