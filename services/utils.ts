@@ -230,7 +230,7 @@ export const applyColorFilter = async (imageUrl: string, filter: ArtisticFilterT
             } else if (filter === 'GRAYSCALE') {
                 ctx.filter = 'grayscale(100%)';
             }
-            
+
             ctx.drawImage(img, 0, 0);
             resolve(canvas.toDataURL('image/png'));
         };
@@ -247,40 +247,40 @@ export const processGreenScreenImage = async (imageUrl: string): Promise<string>
         const img = new Image();
         img.crossOrigin = "Anonymous";
         img.onload = () => {
-             const canvas = document.createElement('canvas');
-             canvas.width = img.width; canvas.height = img.height;
-             const ctx = canvas.getContext('2d');
-             if (!ctx) { reject(new Error("Canvas context failed")); return; }
-             ctx.drawImage(img, 0, 0);
-             const worker = getWorker();
-             const rawData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-             
-             const timeoutId = setTimeout(() => {
-                 worker.terminate();
-                 reject(new Error("Processing timed out"));
-             }, 10000);
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width; canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { reject(new Error("Canvas context failed")); return; }
+            ctx.drawImage(img, 0, 0);
+            const worker = getWorker();
+            const rawData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-             worker.onmessage = (e) => {
-                 clearTimeout(timeoutId);
-                 const { processedImageData, width, height } = e.data;
-                 const newCanvas = document.createElement('canvas');
-                 newCanvas.width = width; newCanvas.height = height;
-                 const nCtx = newCanvas.getContext('2d');
-                 nCtx?.putImageData(processedImageData, 0, 0);
-                 worker.terminate(); resolve(newCanvas.toDataURL('image/png'));
-             };
-             
-             // Using stronger settings for cleanup
-             worker.postMessage({ 
-                 rawImageData: rawData, 
-                 id: 0, 
-                 width: canvas.width,
-                 height: canvas.height,
-                 removalMode: 'flood',
-                 targetColorHex: '#00FF00',
-                 colorTolerance: 18,
-                 erodeStrength: 1
-             }, [rawData.data.buffer]);
+            const timeoutId = setTimeout(() => {
+                worker.terminate();
+                reject(new Error("Processing timed out"));
+            }, 10000);
+
+            worker.onmessage = (e) => {
+                clearTimeout(timeoutId);
+                const { processedImageData, width, height } = e.data;
+                const newCanvas = document.createElement('canvas');
+                newCanvas.width = width; newCanvas.height = height;
+                const nCtx = newCanvas.getContext('2d');
+                nCtx?.putImageData(processedImageData, 0, 0);
+                worker.terminate(); resolve(newCanvas.toDataURL('image/png'));
+            };
+
+            // Using stronger settings for cleanup
+            worker.postMessage({
+                rawImageData: rawData,
+                id: 0,
+                width: canvas.width,
+                height: canvas.height,
+                removalMode: 'flood',
+                targetColorHex: '#00FF00',
+                colorTolerance: 18,
+                erodeStrength: 1
+            }, [rawData.data.buffer]);
         };
         img.onerror = reject; img.src = imageUrl;
     });
@@ -300,43 +300,82 @@ export const getFontFamily = (fontStyle: string, customFont?: string): string =>
     return 'Noto Sans TC, sans-serif';
 };
 
-export const generateFrameZip = async (stickers: any[], zipName: string, mainStickerUrl?: string, packageInfo?: StickerPackageInfo) => {
+// 96x74 Tab Image Generator (Standalone)
+export const generateTabImage = async (sourceUrl: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 96; canvas.height = 74;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return reject(new Error("Canvas context failed"));
+
+            // Smart Fit: Emojis are 180x180 (Square), Tab is 96x74
+            // Center and Scale to fit Height or Width (Contain)
+            const scale = Math.min(96 / img.width, 74 / img.height);
+            const w = img.width * scale;
+            const h = img.height * scale;
+
+            ctx.drawImage(img, (96 - w) / 2, (74 - h) / 2, w, h);
+            resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = reject;
+        img.src = sourceUrl;
+    });
+};
+
+export const generateFrameZip = async (stickers: any[], zipName: string, mainStickerUrl?: string, packageInfo?: StickerPackageInfo, type: 'STATIC' | 'EMOJI' = 'STATIC') => {
     const zip = new JSZip();
     const folder = zip.folder(zipName) || zip;
     const getBlob = async (url: string) => (await fetch(url)).blob();
+
+    // 1. Add Stickers
     let idx = 1;
     for (const sticker of stickers) {
-        const fileName = `${idx.toString().padStart(2, '0')}`;
+        // EMOJI: 001.png (3 digits). STICKER: 01.png (2 digits) or just 1.png
+        const pad = type === 'EMOJI' ? 3 : 2;
+        const fileName = `${idx.toString().padStart(pad, '0')}`;
         folder.file(`${fileName}.png`, await getBlob(sticker.url));
         idx++;
     }
+
+    // 2. Add Main/Tab Images
     const mainRefUrl = mainStickerUrl || (stickers.length > 0 ? stickers[0].url : null);
     if (mainRefUrl) {
         try {
-            const img = new Image(); img.src = mainRefUrl;
-            await new Promise(r => img.onload = r);
-            const mainCanvas = document.createElement('canvas'); mainCanvas.width = 240; mainCanvas.height = 240;
-            const ctxM = mainCanvas.getContext('2d');
-            if (ctxM) {
-                const scale = Math.min(240 / img.width, 240 / img.height);
-                const w = img.width * scale, h = img.height * scale;
-                ctxM.drawImage(img, (240 - w) / 2, (240 - h) / 2, w, h);
-                folder.file('main.png', await new Promise<Blob>(r => mainCanvas.toBlob(b => r(b!))));
+            const img = new Image(); img.src = mainRefUrl; await new Promise(r => img.onload = r);
+
+            // STICKER TYPE: Needs main.png (240x240) AND tab.png (96x74)
+            if (type === 'STATIC') {
+                const mainCanvas = document.createElement('canvas'); mainCanvas.width = 240; mainCanvas.height = 240;
+                const ctxM = mainCanvas.getContext('2d');
+                if (ctxM) {
+                    const scale = Math.min(240 / img.width, 240 / img.height);
+                    const w = img.width * scale, h = img.height * scale;
+                    ctxM.drawImage(img, (240 - w) / 2, (240 - h) / 2, w, h);
+                    folder.file('main.png', await new Promise<Blob>(r => mainCanvas.toBlob(b => r(b!))));
+                }
             }
+
+            // BOTH TYPES: Need tab.png (96x74)
             const tabCanvas = document.createElement('canvas'); tabCanvas.width = 96; tabCanvas.height = 74;
             const ctxT = tabCanvas.getContext('2d');
             if (ctxT) {
-                 const scaleT = Math.min(96 / img.width, 74 / img.height);
-                 const wT = img.width * scaleT, hT = img.height * scaleT;
-                 ctxT.drawImage(img, (96 - wT) / 2, (74 - hT) / 2, wT, hT);
-                 folder.file('tab.png', await new Promise<Blob>(r => tabCanvas.toBlob(b => r(b!))));
+                const scaleT = Math.min(96 / img.width, 74 / img.height);
+                const wT = img.width * scaleT, hT = img.height * scaleT;
+                ctxT.drawImage(img, (96 - wT) / 2, (74 - hT) / 2, wT, hT);
+                folder.file('tab.png', await new Promise<Blob>(r => tabCanvas.toBlob(b => r(b!))));
             }
-        } catch(e) { console.error("Icon generation failed", e); }
+        } catch (e) { console.error("Icon generation failed", e); }
     }
+
+    // 3. Metadata
     if (packageInfo) {
         const content = `[Sticker Info]\nTitle: ${packageInfo.title.zh}\nDesc: ${packageInfo.description.zh}`;
         folder.file('info.txt', content);
     }
+
     const content = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(content);
     const a = document.createElement('a'); a.href = url; a.download = `${zipName}.zip`; a.click();
@@ -350,13 +389,13 @@ export const extractDominantColors = (imageUrl: string): Promise<string[]> => {
             const ctx = canvas.getContext('2d'); if (!ctx) return resolve([]);
             ctx.drawImage(img, 0, 0, 100, 100);
             const data = ctx.getImageData(0, 0, 100, 100).data;
-            const colorCounts: {[key: string]: number} = {};
-            for(let i=0; i<data.length; i+=16) {
-                const r = Math.round(data[i] / 20) * 20, g = Math.round(data[i+1] / 20) * 20, b = Math.round(data[i+2] / 20) * 20;
+            const colorCounts: { [key: string]: number } = {};
+            for (let i = 0; i < data.length; i += 16) {
+                const r = Math.round(data[i] / 20) * 20, g = Math.round(data[i + 1] / 20) * 20, b = Math.round(data[i + 2] / 20) * 20;
                 const hex = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
                 colorCounts[hex] = (colorCounts[hex] || 0) + 1;
             }
-            resolve(Object.entries(colorCounts).sort((a,b) => b[1] - a[1]).slice(0, 5).map(x => x[0]));
+            resolve(Object.entries(colorCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(x => x[0]));
         };
         img.onerror = () => resolve([]); img.src = imageUrl;
     });

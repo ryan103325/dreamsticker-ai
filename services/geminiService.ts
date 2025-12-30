@@ -403,16 +403,28 @@ export const generateCharacterDescriptionFromKeyword = async (keyword: string): 
 export const generateRandomCharacterPrompt = async (type: 'ANIMAL' | 'PERSON', keyword?: string): Promise<string> => {
     const ai = getAI();
 
-    let prompt = `隨機描述一個適合 Line 貼圖的可愛 IP 角色 (${type === 'ANIMAL' ? '動物' : '人物'})。`;
+    let systemInstruction = `你是創意總監。請設計一個適合 Line 貼圖的「獨特且有創意」的 IP 角色 (${type === 'ANIMAL' ? '動物' : '人物'})。
+    
+    規則：
+    1. **拒絕平庸**：不要只給「可愛的小貓」或「普通的男孩」。
+    2. **大膽組合**：請隨機結合「職業/身份」+「物種/類型」+「獨特風格」。
+       - 例如：穿著太空衣的倉鼠 (科幻風)、正在做瑜珈的樹懶 (運動風)、戴著單片眼鏡的紳士青蛙 (英倫風)、龐克搖滾風的兔子。
+    3. **鮮明配色**：請指定一組獨特的配色方案 (例如：螢光綠配紫色、黑金配色、粉彩撞色)。
+    4. **細節描述**：描述外觀特徵、配件 (帽子、眼鏡、圍巾) 和個性。
+    
+    輸出要求：
+    - 使用繁體中文。
+    - 50-80字左右。
+    - 直接描述角色，不要有多餘的前言。`;
 
     if (keyword && keyword.trim() !== '') {
-        prompt += `\n**重點主題/特徵：${keyword}** (請務必在設計中融合此元素，例如：龐克風、珍珠奶茶、愛心...)。`;
+        systemInstruction += `\n\n**強制指定元素：${keyword}** (請務必將此關鍵字完美融入設計中)。`;
     }
 
-    prompt += ` 繁體中文，50-80字。描述外觀、顏色、配件。`;
-
     const response = await ai.models.generateContent({
-        model: TEXT_MODEL, contents: { parts: [{ text: prompt }] }, config: { temperature: 1.2 }
+        model: TEXT_MODEL,
+        contents: { parts: [{ text: systemInstruction }] },
+        config: { temperature: 1.4 } // High temperature for maximum creativity
     });
     return response.text || "";
 };
@@ -518,7 +530,7 @@ export const generateGroupCharacterSheet = async (
     });
 };
 
-export const generateStickerSheet = async (characterUrl: string, configs: StickerConfig[], style: string, sheetIndex: number, totalSheets: number, layout?: SheetLayout, fontConfig?: FontConfig): Promise<{ url: string }> => {
+export const generateStickerSheet = async (characterUrl: string, configs: StickerConfig[], style: string, sheetIndex: number, totalSheets: number, layout?: SheetLayout, fontConfig?: FontConfig, stickerType: StickerType = 'STATIC'): Promise<{ url: string }> => {
     const ai = getAI();
     const base64Char = stripMimeType(characterUrl);
 
@@ -535,7 +547,35 @@ export const generateStickerSheet = async (characterUrl: string, configs: Sticke
 
     const gridInstructions = configs.map((c, i) => `   - Cell ${i + 1}: Action "${c.emotionPrompt}". ${c.showText ? `TEXT: "${c.text}" (Interact with this text!)` : "NO TEXT"}.`).join('\n');
 
-    const basePrompt = `
+    let basePrompt = "";
+
+    if (stickerType === 'EMOJI') {
+        // --- EMOJI MODE PROMPT ---
+        basePrompt = `
+    Grid Specification: ${cols} columns x ${rows} rows.
+    Target Resolution: 2K (2048x2048).
+    [System Role] Icon Designer / Emoji Artist.
+    [Formatting] Center characters. Solid Green (#00FF00) BG.
+
+    **DESIGN STYLE: LINE EMOJI (Strict)**
+    1. **MINIMALIST & BOLD**: These are small emojis (180px). Use **Simpler shapes**, **fewer details**, and **Bold lines** for high readability at small sizes.
+    2. **NO WHITE OUTLINE**: Do NOT add a white border around the character. The character should be **FULL BLEED** (fill the cell as much as possible).
+       - *Reasoning*: Emojis need to connect seamlessly like text.
+    3. **ICONIC LOOK**: Think "Vector Icon" or "Favicon" style. Clear silhouettes.
+    4. **CONNECTABLE**: If possible, design element so they look good when placed next to each other.
+
+    **COLOR SAFETY:**
+    - NO Green (#00FF00) inside the artwork.
+    - If fading, gradient to TRANSPARENT or HARD CUT. No partial opacity on green.
+
+    **ENGINEERING GAP:** Leave a clear **Green River** (empty space) of at least 15px between cells for slicing.
+
+    [Instructions]
+    ${gridInstructions}
+        `;
+    } else {
+        // --- STANDARD STICKER MODE PROMPT ---
+        basePrompt = `
     Grid Specification: ${cols} columns x ${rows} rows.
     Target Resolution: 2K (2048x2048).
     [System Role] Senior Sticker Artist.
@@ -573,7 +613,8 @@ export const generateStickerSheet = async (characterUrl: string, configs: Sticke
     [FINAL CHECK]
     Spacing: Ensure > 3% green gap between all stickers (Vertical & Horizontal).
     Background: Pure Green, no artifacts.
-    `;
+        `;
+    }
 
     // Static Generation Loop
     let attempts = 0;

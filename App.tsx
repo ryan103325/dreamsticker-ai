@@ -22,7 +22,7 @@ import {
     CharacterInput
 } from './types';
 import { generateIPCharacter, generateStickerSheet, editSticker, parseStickerIdeas, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish } from './services/geminiService';
-import { generateFrameZip, wait, resizeImage, extractDominantColors, blobToDataUrl, getFontFamily, processGreenScreenImage } from './services/utils';
+import { generateFrameZip, wait, resizeImage, extractDominantColors, blobToDataUrl, getFontFamily, processGreenScreenImage, generateTabImage } from './services/utils';
 import { processGreenScreenAndSlice, waitForOpenCV } from './services/opencvService';
 import { Loader } from './components/Loader';
 import { MagicEditor } from './components/MagicEditor';
@@ -203,8 +203,8 @@ export const App = () => {
     const [stickerQuantity, setStickerQuantity] = useState<StickerQuantity>(8);
     const [stickerConfigs, setStickerConfigs] = useState<StickerConfig[]>(DEFAULT_STICKER_CONFIGS);
 
-    // Always STATIC
-    const stickerType: StickerType = 'STATIC';
+    // Product Type State (Sticker vs Emoji)
+    const [stickerType, setStickerType] = useState<StickerType>('STATIC');
 
     const [fontConfig, setFontConfig] = useState<FontConfig>({
         language: LANGUAGES[0],
@@ -574,7 +574,8 @@ export const App = () => {
                     generatedChar.url,
                     cleanConfigs,
                     stylePrompt,
-                    i, batches.length, layout, fontConfig
+                    i, batches.length, layout, fontConfig,
+                    stickerType // PASS STICKER TYPE
                 );
 
                 generatedSheets.push(sheetResult.url);
@@ -611,7 +612,12 @@ export const App = () => {
 
             for (let i = 0; i < rawSheetUrls.length; i++) {
                 const url = rawSheetUrls[i];
-                const cvSliced = await processGreenScreenAndSlice(url, rows, cols, targetW, targetH);
+                // EMOJI: 180x180, Padding 0. STICKER: 370x320, Padding 2.
+                const sliceW = stickerType === 'EMOJI' ? 180 : 370;
+                const sliceH = stickerType === 'EMOJI' ? 180 : 320;
+                const slicePad = stickerType === 'EMOJI' ? 0 : 2;
+
+                const cvSliced = await processGreenScreenAndSlice(url, rows, cols, sliceW, sliceH, slicePad);
                 if (cvSliced.length === 0) {
                     console.warn(`Sheet ${i + 1}: OpenCV returned no objects.`);
                 }
@@ -627,7 +633,7 @@ export const App = () => {
             const newStickers: GeneratedImage[] = allSlicedImages.map((url, idx) => ({
                 id: stickerConfigs[idx]?.id || `s-${idx}`,
                 url,
-                type: 'STATIC',
+                type: stickerType,
                 status: 'SUCCESS',
                 emotion: stickerConfigs[idx]?.text || `Sticker ${idx + 1}`
             }));
@@ -771,6 +777,29 @@ export const App = () => {
                                     <h2 className="text-4xl font-black text-slate-800">創造您的專屬 IP 角色</h2>
                                     <p className="text-slate-500 text-lg">選擇一種方式開始，AI 將為您打造獨一無二的貼圖主角</p>
                                 </div>
+
+                                {/* PRODUCT MODE SWITCHER */}
+                                <div className="flex justify-center mt-8 mb-4">
+                                    <div className="bg-slate-200 p-1 rounded-xl flex gap-1">
+                                        <button
+                                            onClick={() => setStickerType('STATIC')}
+                                            className={`px-6 py-2 rounded-lg font-bold transition-all ${stickerType === 'STATIC' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            一般貼圖 (Stickers)
+                                        </button>
+                                        <button
+                                            onClick={() => setStickerType('EMOJI')}
+                                            className={`px-6 py-2 rounded-lg font-bold transition-all ${stickerType === 'EMOJI' ? 'bg-white text-pink-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            LINE 表情貼 (Emojis)
+                                        </button>
+                                    </div>
+                                </div>
+                                {stickerType === 'EMOJI' && (
+                                    <div className="text-center text-sm text-pink-500 font-bold mb-8 animate-fade-in">
+                                        ＊表情貼模式：尺寸 180x180 px，無白邊，適合連續輸入
+                                    </div>
+                                )}
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-12">
                                     <div onClick={() => { setInputMode('PHOTO'); setCharCount(1); }} className="cursor-pointer p-8 rounded-3xl border-2 border-white bg-white hover:border-indigo-500 hover:shadow-xl hover:-translate-y-1 transition-all group">
@@ -1341,7 +1370,19 @@ export const App = () => {
                                     />
                                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold pointer-events-none">.zip</span>
                                 </div>
-                                <button onClick={() => generateFrameZip(finalStickers, zipFileName || "MyStickers", finalStickers.find(s => s.id === mainStickerId)?.url, stickerPackageInfo || undefined)} className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform hover:-translate-y-1 whitespace-nowrap"><DownloadIcon /> 下載全部</button>
+                                {stickerType === 'EMOJI' && (
+                                    <button
+                                        onClick={async () => {
+                                            if (!finalStickers[0]) return;
+                                            const url = await generateTabImage(finalStickers[0].url);
+                                            const a = document.createElement('a'); a.href = url; a.download = 'tab.png'; a.click();
+                                        }}
+                                        className="px-4 py-3 bg-white border-2 border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm whitespace-nowrap"
+                                    >
+                                        生成 Tab 縮圖 (96x74)
+                                    </button>
+                                )}
+                                <button onClick={() => generateFrameZip(finalStickers, zipFileName || "MyStickers", finalStickers.find(s => s.id === mainStickerId)?.url, stickerPackageInfo || undefined, stickerType)} className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform hover:-translate-y-1 whitespace-nowrap"><DownloadIcon /> 下載全部</button>
                             </div>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
@@ -1372,9 +1413,7 @@ export const App = () => {
                         )}
                     </div>
                 )}
-
             </main>
-
             {isProcessing && <Loader message={loadingMsg} />}
             <MagicEditor isOpen={magicEditorOpen} imageUrl={editorImage} onClose={() => setMagicEditorOpen(false)} onGenerate={handleMagicGenerate} isProcessing={isProcessing} isAnimated={false} />
             <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
