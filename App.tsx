@@ -29,6 +29,7 @@ import { MagicEditor } from './components/MagicEditor';
 import { HelpModal } from './components/HelpModal';
 import { UploadIcon, MagicWandIcon, StickerIcon, DownloadIcon, RefreshIcon, EditIcon, CloseIcon, HelpIcon, StarIcon, CopyIcon, ExternalLinkIcon, FolderOpenIcon, DiceIcon, TrashIcon, ArrowLeftIcon } from './components/Icons';
 import { LandingPage } from './components/LandingPage';
+import { setApiKey } from './services/geminiService';
 
 // Add new step for Smart Crop Preview
 const SHEET_EDITOR_STEP = AppStep.SHEET_EDITOR;
@@ -253,10 +254,8 @@ export const App = () => {
     const [hasKey, setHasKey] = useState(false);
 
     const setKeyAndStart = (key: string) => {
-        import('./services/geminiService').then(({ setApiKey }) => {
-            setApiKey(key);
-            setHasKey(true);
-        });
+        setApiKey(key);
+        setHasKey(true);
     };
 
     useEffect(() => {
