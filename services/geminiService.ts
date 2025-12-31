@@ -165,6 +165,13 @@ export const parseStickerIdeas = async (rawText: string, includeText: boolean = 
        - Remove any numbering (1., 2.) from the final "text".
        - Remove emojis from the "text" field (keep text clean).
 
+    [COMBO/CONTINUOUS PATTERN DETECTION]
+    If you detect a sequence of items representing a single long object (e.g., "Long Cat Left", "Long Cat Middle", "Long Cat Right" OR "Train Head", "Train Body", "Train Tail"):
+    1. **Left/Head**: Add "**[COMBO-LEFT]** Extend graphics to the **RIGHT edge** to connect." to 'emotionPrompt'.
+    2. **Middle/Body**: Add "**[COMBO-MID]** Extend graphics to **BOTH Left & Right edges** to connect." to 'emotionPrompt'.
+    3. **Right/Tail**: Add "**[COMBO-RIGHT]** Extend graphics to the **LEFT edge** to connect." to 'emotionPrompt'.
+    4. Ensure the visual description describes the specific part (Head/Body/Tail) but mentions it's part of a continuous object.
+
     [OUTPUT FORMAT]
     Return a JSON Array of objects. Each object must have:
     ${textInstruction}
