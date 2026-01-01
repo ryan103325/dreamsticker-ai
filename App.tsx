@@ -779,6 +779,8 @@ export const App = () => {
                                 </div>
 
                                 {/* PRODUCT MODE SWITCHER */}
+                                {/* PRODUCT MODE SWITCHER (TEMPORARILY DISABLED FOR DEBUG) */}
+                                {/* 
                                 <div className="flex justify-center mt-8 mb-4">
                                     <div className="bg-slate-200 p-1 rounded-xl flex gap-1">
                                         <button
@@ -795,6 +797,7 @@ export const App = () => {
                                         </button>
                                     </div>
                                 </div>
+                                */}
                                 {stickerType === 'EMOJI' && (
                                     <div className="text-center text-sm text-pink-500 font-bold mb-8 animate-fade-in">
                                         ＊表情貼模式：尺寸 180x180 px，無白邊，適合連續輸入
