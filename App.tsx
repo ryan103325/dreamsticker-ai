@@ -44,7 +44,8 @@ const ART_STYLES = [
     "水彩手繪(畫風設定：柔和水彩暈染質感，邊緣略帶手繪粗糙感，文青風格。)",
     "蠟筆童趣(畫風設定：蠟筆筆觸，顆粒感，兒童畫風格，色彩鮮豔飽和。)",
     "極簡線條(畫風設定：黑白或單色線條為主，極簡風格，沒有過多填色。)",
-    "像素風(畫風設定：復古遊戲、8-bit、點陣圖風格。)"
+    "像素風(畫風設定：復古遊戲、8-bit、點陣圖風格。)",
+    "吉卜力風(畫風設定：手繪質感，宮崎駿風格，色彩飽滿自然，背景夢幻精緻。)"
 ];
 
 // Predefined Font Options for Quick Selection
@@ -221,7 +222,7 @@ export const App = () => {
     const [isPromptGeneratorOpen, setIsPromptGeneratorOpen] = useState(false);
     const [promptTextListInput, setPromptTextListInput] = useState("");
     const [promptFontStyleInput, setPromptFontStyleInput] = useState(""); // Kept for state compatibility but UI removed
-    const [promptGenQuantity, setPromptGenQuantity] = useState<StickerQuantity>(20); // Default to 20 as per user request
+    const [promptGenQuantity, setPromptGenQuantity] = useState<StickerQuantity>(40); // Default to 40
     const [promptArtStyleInput, setPromptArtStyleInput] = useState("");
 
     // Sheet & Preview Data
@@ -720,97 +721,88 @@ export const App = () => {
         ? (EMOJI_SPECS[promptGenQuantity] || EMOJI_SPECS[40])
         : (STICKER_SPECS[promptGenQuantity] || STICKER_SPECS[20]);
 
-    const promptTemplate = useMemo(() => {
-        if (stickerType === 'EMOJI') {
-            return `# LINE 表情貼 ${promptGenQuantity} 格完整版 Prompt (尺寸修正版：${promptSpec.width}x${promptSpec.height})
+    const promptSegments = useMemo(() => {
+        const isEmoji = stickerType === 'EMOJI';
 
-請生成一張包含 ${promptGenQuantity} 個不同動作與表情的【參考上傳圖片 (Reference Upload)】貼圖集大圖，用於 LINE 表情貼製作。
+        // Common variables (Highlighed)
+        const vQty = { text: String(promptGenQuantity), highlight: true };
+        const vW = { text: String(promptSpec.width), highlight: true };
+        const vH = { text: String(promptSpec.height), highlight: true };
+        const vCols = { text: String(promptSpec.cols), highlight: true };
+        const vRows = { text: String(promptSpec.rows), highlight: true };
+        const vArt = { text: artStyleDisplay, highlight: true };
+        const vFont = { text: fontStyleDisplay, highlight: true };
+        const vTextList = { text: formattedTextList, highlight: true };
 
-## 【最高優先級約束：佈局、邊距與居中】
-**（此部分請嚴格執行，確保後續裁切不出錯）**
-
-1.  **大圖規格**：整張圖片畫布尺寸為 **${promptSpec.width} pixels (寬) x ${promptSpec.height} pixels (高)**。
-2.  **隱形網格結構**：畫面內部邏輯分為 ${promptSpec.cols} 直欄 x ${promptSpec.rows} 橫列，共 ${promptGenQuantity} 個單元格。
-3.  **純淨背景**：整張大圖背景統一為純綠色 (#00FF00)，無漸層、無雜點。**不可繪製任何黑色的網格分隔線或邊框**。
-4.  **強制完美居中**：在每一個隱形單元格內，主體必須在視覺上「完美居中」排列。
-5.  **嚴格安全邊距 (Strict Safety Margin)**：
-    * **重要：** 每個貼圖之間（單元格邊界）必須保留 **30 pixels** 的純綠色間隔。
-    * **絕對禁止**任何像素點貼齊、接觸或超出單元格範圍。確保每個角色周圍都有一圈明顯的綠色「安全氣囊」。
-
-## 【角色與風格一致性】
-* **角色設定**：請嚴格參考上傳圖片中的角色特徵（髮型、服裝、五官、配色），保持完全一致。 (**注意：若參考圖片中文字較小或顏色單調，請忽略該文字風格，強制採用下方的「文字設計規範」進行創作。**)
-* **畫風設定**：${artStyleDisplay}
-* **配色風格**：高飽和度，色彩鮮明，對比度高，典型 LINE 貼圖配色。
-* **線條與上色**：線條單一粗細，圓角筆觸，乾淨平滑。上色平塗為主，僅一層輕微陰影。
-* **顏色禁忌**：角色本體、服裝與文字**絕對不可使用綠色 (#00FF00 或相近色)**，因為綠色是用作去背的背景色，避免被誤刪。
-
-## 【畫面內容規範】
-* 每一格僅包含：單一角色本體（可搭配少量必要的簡單情緒符號，如愛心、汗滴、生氣符號，符號不可喧賓奪主或遮擋臉部）。
-* ❌ 不包含任何場景背景。
-* ❌ 不包含任何文字內容。
-* ❌ 不包含任何手機系統 emoji。
-
-## 【${promptGenQuantity} 格表情與動作清單】(預設)
-（請依照 ${promptSpec.cols}x${promptSpec.rows} 的順序排列，確保每格動作不同）
-
-【一、高頻回覆：動作明確不撞車】
-01. [打招呼] 雙手舉高揮舞 (熱情開場)
-02. [再見] 背對鏡頭揮手 (帥氣離場)
-03. [OK] 雙手在頭頂比大圓圈 (Body Language)
-04. [NO] 雙手在胸前交叉打叉
-05. [收到] 立正站好，舉手敬禮 (遵命)
-06. [感謝] 90度標準鞠躬 (禮貌)
-07. [道歉] 土下座 (趴在地上跪拜，誠意最足)
-08. [拜託] 雙膝跪地，雙手合十祈禱
-09. [指名] 單手指著鏡頭 (就是你/You!)
-10. [加一] 高舉寫著「+1」的牌子
-
-【二、正面情緒：張力與道具區隔】
-11. [大笑] 躺在地上打滾 (笑到肚子痛)
-12. [慶祝] 拉開彩炮，彩帶飛舞
-13. [加油] 雙手拿啦啦隊彩球應援
-14. [愛心] 雙手抱著一顆巨大的紅愛心
-15. [自信] 雙手叉腰，抬頭挺胸 (鼻子變長)
-16. [期待] 趴在地上托腮，雙腳晃動
-17. [擊掌] 跳起來側面擊掌 (Give me five)
-18. [害羞] 身體扭成麻花狀，雙手摀臉
-19. [親親] 嘟嘴身體前傾，飛出小愛心
-20. [靈感] 彈手指，頭頂亮起燈泡
-(下略，請自行補充至 ${promptGenQuantity} 個...)
-
-## 【最終輸出確認】
-輸出一張 ${promptSpec.width}x${promptSpec.height} 的純綠底圖片，上面整齊排列 ${promptGenQuantity} 個單元，無網格線，每個單元都完美居中且周圍有充足的邊距（至少 30px 間隔）。`;
+        if (isEmoji) {
+            return [
+                "# LINE 表情貼 ", vQty, " 格完整版 Prompt (尺寸修正版：", vW, "x", vH, ")\n\n",
+                "請生成一張包含 ", vQty, " 個不同動作與表情的【參考上傳圖片 (Reference Upload)】貼圖集大圖，用於 LINE 表情貼製作。\n\n",
+                "## 【最高優先級約束：佈局、邊距與居中】\n**（此部分請嚴格執行，確保後續裁切不出錯）**\n\n",
+                "1.  **大圖規格**：整張圖片畫布尺寸為 **", vW, " pixels (寬) x ", vH, " pixels (高)**。\n",
+                "2.  **隱形網格結構**：畫面內部邏輯分為 ", vCols, " 直欄 x ", vRows, " 橫列，共 ", vQty, " 個單元格。\n",
+                "3.  **純淨背景**：整張大圖背景統一為純綠色 (#00FF00)，無漸層、無雜點。**不可繪製任何黑色的網格分隔線或邊框**。\n",
+                "4.  **強制完美居中**：在每一個隱形單元格內，主體必須在視覺上「完美居中」排列。\n",
+                "5.  **嚴格安全邊距 (Strict Safety Margin)**：\n",
+                "    * **重要：** 每個貼圖之間（單元格邊界）必須保留 **30 pixels** 的純綠色間隔。\n",
+                "    * **絕對禁止**任何像素點貼齊、接觸或超出單元格範圍。確保每個角色周圍都有一圈明顯的綠色「安全氣囊」。\n\n",
+                "## 【角色與風格一致性】\n",
+                "* **角色設定**：請嚴格參考上傳圖片中的角色特徵（髮型、服裝、五官、配色），保持完全一致。 (**注意：若參考圖片中文字較小或顏色單調，請忽略該文字風格，強制採用下方的「文字設計規範」進行創作。**)\n",
+                "* **畫風設定**：", vArt, "\n",
+                "* **配色風格**：高飽和度，色彩鮮明，對比度高，典型 LINE 貼圖配色。\n",
+                "* **線條與上色**：線條單一粗細，圓角筆觸，乾淨平滑。上色平塗為主，僅一層輕微陰影。\n",
+                "* **顏色禁忌**：角色本體、服裝與文字**絕對不可使用綠色 (#00FF00 或相近色)**，因為綠色是用作去背的背景色，避免被誤刪。\n\n",
+                "## 【畫面內容規範】\n",
+                "* 每一格僅包含：單一角色本體（可搭配少量必要的簡單情緒符號，如愛心、汗滴、生氣符號，符號不可喧賓奪主或遮擋臉部）。\n",
+                "* ❌ 不包含任何場景背景。\n",
+                "* ❌ 不包含任何文字內容。\n",
+                "* ❌ 不包含任何手機系統 emoji。\n\n",
+                "## 【", vQty, " 格表情與動作清單】(預設)\n",
+                "（請依照 ", vCols, "x", vRows, " 的順序排列，確保每格動作不同）\n\n",
+                "【一、高頻回覆：動作明確不撞車】\n",
+                "01. [打招呼] 雙手舉高揮舞 (熱情開場)\n02. [再見] 背對鏡頭揮手 (帥氣離場)\n03. [OK] 雙手在頭頂比大圓圈 (Body Language)\n04. [NO] 雙手在胸前交叉打叉\n",
+                "05. [收到] 立正站好，舉手敬禮 (遵命)\n06. [感謝] 90度標準鞠躬 (禮貌)\n07. [道歉] 土下座 (趴在地上跪拜，誠意最足)\n08. [拜託] 雙膝跪地，雙手合十祈禱\n",
+                "09. [指名] 單手指著鏡頭 (就是你/You!)\n10. [加一] 高舉寫著「+1」的牌子\n\n",
+                "【二、正面情緒：張力與道具區隔】\n",
+                "11. [大笑] 躺在地上打滾 (笑到肚子痛)\n12. [慶祝] 拉開彩炮，彩帶飛舞\n13. [加油] 雙手拿啦啦隊彩球應援\n14. [愛心] 雙手抱著一顆巨大的紅愛心\n",
+                "15. [自信] 雙手叉腰，抬頭挺胸 (鼻子變長)\n16. [期待] 趴在地上托腮，雙腳晃動\n17. [擊掌] 跳起來側面擊掌 (Give me five)\n18. [害羞] 身體扭成麻花狀，雙手摀臉\n",
+                "19. [親親] 嘟嘴身體前傾，飛出小愛心\n20. [靈感] 彈手指，頭頂亮起燈泡\n",
+                "(下略，請自行補充至 ", vQty, " 個...)\n\n",
+                "## 【最終輸出確認】\n",
+                "輸出一張 ", vW, "x", vH, " 的純綠底圖片，上面整齊排列 ", vQty, " 個單元，無網格線，每個單元都完美居中且周圍有充足的邊距（至少 30px 間隔）。"
+            ];
         }
 
-        // Return Sticker Template
-        return `✅ ${promptGenQuantity} 格貼圖集｜Prompt 指令 (${promptSpec.cols} × ${promptSpec.rows} 版)｜網格與佈局絕對定義
-
-[內容、間隔與對位設定]
-整體畫幅：${promptSpec.width} × ${promptSpec.height} px (強制橫向矩形畫幅)。
-結構佈局：精確佈局為 ${promptSpec.rows} 橫排 (Rows) × ${promptSpec.cols} 直欄 (Columns)，共 ${promptGenQuantity} 個獨立角色。
-無物理格線：背景必須是 100% 純淨、高飽和、無雜點的綠幕 (#00FF00)，絕對禁止繪製任何物理隔線、框線 or 單元格界線。
-強制居中：每張貼圖內容必須嚴格位於單元格中心。
-留白空間：主體內容需與單元格邊界保持「最大化呈現」，但必須精確預留 10 px 的純綠色安全空隙，內容不可貼齊邊界。
-角色一致性：參考上傳圖片中的角色，生成 一張包含 ${promptGenQuantity} 個不同動作的角色貼圖集。
-嚴禁重複：這 ${promptGenQuantity} 張貼圖的姿勢、文字與表情組合絕不重複。
-
-[文字設計]
-語言：【台灣繁體中文】
-文字內容：${formattedTextList}
-排版比例：單張貼圖內，文字佔比約 40%，主角佔比約 60%。文字不可遮臉。
-邊框設計：文字與角色外圍皆需具備「細薄黑邊內層」，外層包覆「厚度適中的圓滑白色外框」。
-字型風格：【${fontStyleDisplay}】
-
-[文字色彩]
-絕對禁止使用錄色、螢光綠、黃綠色等接近背景綠幕的顏色，以免去背失效。絕對禁止黑色。
-
-[表情與動作設計]
-表情參考：【喜、怒、哀、樂、驚訝、無語...】
-畫風設定：【${artStyleDisplay}】。
-
-[輸出格式]
-一張 ${promptSpec.width}x${promptSpec.height} 大圖，確保貼圖為 ${promptSpec.rows} 橫排 × ${promptSpec.cols} 直欄，共計 ${promptGenQuantity} 個貼圖。文字與角色外圍皆需具備「細薄黑邊」與「白色外框」。背景為 100% 純綠色 #00FF00，不准有格線，內容居中並保留 10px 邊距。務必確保符合需求。`;
+        // Sticker Template
+        return [
+            "✅ ", vQty, " 格貼圖集｜Prompt 指令 (", vCols, " × ", vRows, " 版)｜網格與佈局絕對定義\n\n",
+            "[內容、間隔與對位設定]\n",
+            "整體畫幅：", vW, " × ", vH, " px (強制橫向矩形畫幅)。\n",
+            "結構佈局：精確佈局為 ", vRows, " 橫排 (Rows) × ", vCols, " 直欄 (Columns)，共 ", vQty, " 個獨立角色。\n",
+            "無物理格線：背景必須是 100% 純淨、高飽和、無雜點的綠幕 (#00FF00)，絕對禁止繪製任何物理隔線、框線 or 單元格界線。\n",
+            "強制居中：每張貼圖內容必須嚴格位於單元格中心。\n",
+            "留白空間：主體內容需與單元格邊界保持「最大化呈現」，但必須精確預留 10 px 的純綠色安全空隙，內容不可貼齊邊界。\n",
+            "角色一致性：參考上傳圖片中的角色，生成 一張包含 ", vQty, " 個不同動作的角色貼圖集。\n",
+            "嚴禁重複：這 ", vQty, " 張貼圖的姿勢、文字與表情組合絕不重複。\n\n",
+            "[文字設計]\n",
+            "語言：【台灣繁體中文】\n",
+            "文字內容：", vTextList, "\n",
+            "排版比例：單張貼圖內，文字佔比約 40%，主角佔比約 60%。文字不可遮臉。\n",
+            "邊框設計：文字與角色外圍皆需具備「細薄黑邊內層」，外層包覆「厚度適中的圓滑白色外框」。\n",
+            "字型風格：【", vFont, "】\n\n",
+            "[文字色彩]\n",
+            "絕對禁止使用錄色、螢光綠、黃綠色等接近背景綠幕的顏色，以免去背失效。絕對禁止黑色。\n\n",
+            "[表情與動作設計]\n",
+            "表情參考：【喜、怒、哀、樂、驚訝、無語...】\n",
+            "畫風設定：【", vArt, "】。\n\n",
+            "[輸出格式]\n",
+            "一張 ", vW, "x", vH, " 大圖，確保貼圖為 ", vRows, " 橫排 × ", vCols, " 直欄，共計 ", vQty, " 個貼圖。文字與角色外圍皆需具備「細薄黑邊」與「白色外框」。背景為 100% 純綠色 #00FF00，不准有格線，內容居中並保留 10px 邊距。務必確保符合需求。"
+        ];
     }, [promptGenQuantity, artStyleDisplay, formattedTextList, fontStyleDisplay, promptSpec, stickerType]);
+
+    const promptTemplate = useMemo(() => {
+        return promptSegments.map(s => (typeof s === 'string' ? s : s.text)).join('');
+    }, [promptSegments]);
 
     useEffect(() => {
         if (appStep === AppStep.STICKER_PROCESSING && finalStickers.length > 0 && !stickerPackageInfo) {
@@ -1219,7 +1211,7 @@ export const App = () => {
                                                                     <div className="flex items-center gap-4">
                                                                         <input
                                                                             type="range"
-                                                                            min="8" max="40" step="4"
+                                                                            min="8" max="40" step="8"
                                                                             value={promptGenQuantity}
                                                                             onChange={(e) => setPromptGenQuantity(Number(e.target.value) as StickerQuantity)}
                                                                             className="flex-1 accent-indigo-600 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
@@ -1242,7 +1234,13 @@ export const App = () => {
                                                         </div>
                                                         <div className="relative group mt-6">
                                                             <div className="absolute -top-3 left-4 px-2 bg-indigo-50 text-[10px] font-black text-indigo-500 uppercase tracking-widest z-10">AI 提示詞預覽</div>
-                                                            <textarea readOnly value={promptTemplate} className="w-full h-48 p-5 bg-slate-900 text-green-400 font-mono text-xs rounded-2xl resize-none outline-none border border-slate-800 shadow-inner" />
+                                                            <div className="w-full h-48 p-5 bg-slate-900 font-mono text-xs rounded-2xl resize-none outline-none border border-slate-800 shadow-inner overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                                                                {promptSegments.map((segment, idx) => (
+                                                                    <span key={idx} className={typeof segment === 'string' ? "text-green-400" : "text-amber-400 font-bold bg-slate-800 px-1 rounded mx-0.5 border border-amber-400/30"}>
+                                                                        {typeof segment === 'string' ? segment : segment.text}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
                                                             <button onClick={() => copyToClipboard(promptTemplate)} className="absolute bottom-4 right-4 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg transition-all flex items-center gap-2 active:scale-95"><CopyIcon /> 一鍵複製提示詞</button>
                                                         </div>
                                                     </div>
