@@ -827,11 +827,16 @@ export const App = () => {
     return (
         <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-20">
             <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm">
-                <div className="flex items-center gap-2">
-                    <div className="bg-gradient-to-tr from-indigo-600 to-purple-500 text-white p-2 rounded-lg">
-                        <StickerIcon />
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg overflow-hidden">
+                        <img src="./logo.png" className="w-full h-full object-cover" alt="Logo" />
                     </div>
-                    <span className="text-xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">DreamSticker AI</span>
+                    <div>
+                        <h1 className="text-xl font-black text-gray-800 tracking-tight flex items-center gap-2">
+                            DreamSticker
+                            <span className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">AI</span>
+                        </h1>
+                    </div>
                 </div>
                 <div className="flex gap-4">
                     <button onClick={() => setHelpOpen(true)} className="p-2 hover:bg-indigo-50 rounded-full text-indigo-600 transition-colors">
@@ -1150,15 +1155,7 @@ export const App = () => {
 
                                     {inputMode === 'UPLOAD_SHEET' && (
                                         <div className="mb-8 space-y-10">
-                                            {/* ... (Same as original code) ... */}
                                             <div className="space-y-6">
-                                                <div>
-                                                    <h4 className="text-2xl font-black text-slate-800 flex items-center gap-2 mb-2">
-                                                        <span>📂</span> 上傳底圖檔案
-                                                    </h4>
-                                                    <p className="text-slate-500">已有製作好的貼圖底稿 (Sprite Sheet)？請先設定網格規格，再上傳圖片。</p>
-                                                </div>
-
                                                 <div className="bg-white p-6 rounded-2xl border-2 border-slate-100 shadow-sm space-y-6 relative overflow-hidden">
                                                     <div className="absolute top-0 left-0 w-1 h-full bg-amber-400"></div>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1249,271 +1246,280 @@ export const App = () => {
                                         </div>
                                     )}
 
-                                    {inputMode !== 'UPLOAD_SHEET' && inputMode !== 'EXISTING_IP' && (
-                                        <div className="mb-8">
-                                            <label className="block text-sm font-bold text-slate-700 mb-2">畫風設定</label>
-                                            <div className="flex flex-wrap gap-2 mb-3">
-                                                {ART_STYLES.map(style => (
-                                                    <button key={style} onClick={() => setStylePrompt(style)} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${stylePrompt === style ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-500'}`}>{style.split(/[\(\（]/)[0]}</button>
-                                                ))}
+                                    {
+                                        inputMode !== 'UPLOAD_SHEET' && inputMode !== 'EXISTING_IP' && (
+                                            <div className="mb-8">
+                                                <label className="block text-sm font-bold text-slate-700 mb-2">畫風設定</label>
+                                                <div className="flex flex-wrap gap-2 mb-3">
+                                                    {ART_STYLES.map(style => (
+                                                        <button key={style} onClick={() => setStylePrompt(style)} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${stylePrompt === style ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-500'}`}>{style.split(/[\(\（]/)[0]}</button>
+                                                    ))}
+                                                </div>
+                                                <div className="relative">
+                                                    <input type="text" value={stylePrompt} onChange={(e) => setStylePrompt(e.target.value)} className="w-full p-4 pl-12 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none font-medium" />
+                                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🎨</div>
+                                                </div>
                                             </div>
-                                            <div className="relative">
-                                                <input type="text" value={stylePrompt} onChange={(e) => setStylePrompt(e.target.value)} className="w-full p-4 pl-12 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none font-medium" />
-                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🎨</div>
+                                        )
+                                    }
+
+                                    {
+                                        inputMode !== 'UPLOAD_SHEET' && (
+                                            <button onClick={handleGenerateCharacter} disabled={isProcessing} className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-black text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                                                {isProcessing ? (<><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>AI 設計中...</>) : (<>開始設計角色 ✨</>)}
+                                            </button>
+                                        )
+                                    }
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {
+                    appStep === AppStep.CANDIDATE_SELECTION && generatedChar && (
+                        <div className="animate-fade-in-up mt-2 max-w-4xl mx-auto pb-32">
+                            {/* ... (Previous Candidate Selection Code) ... */}
+                            <div className="text-center mb-8">
+                                <h2 className="text-3xl font-black text-slate-800">您的專屬 IP 角色誕生了！✨</h2>
+                                <p className="text-slate-500 mt-2">請確認角色設計，滿意後我們將以此為基礎製作整套貼圖。</p>
+                            </div>
+
+                            <div className="bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-slate-100 p-6 mb-8">
+                                {/* Fixed Height Container to prevent full-screen takeover */}
+                                <div className="w-full h-[50vh] flex items-center justify-center bg-gray-50 rounded-2xl relative group border border-slate-100 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgBDAm9BGDWAAJyRCgLaBCAAgXwixzAS0pgAAAABJRU5ErkJggg==')]">
+                                    <img src={generatedChar.url} alt="Character" className="h-full w-full object-contain shadow-lg" />
+                                    <button onClick={handleGenerateCharacter} className="absolute top-4 right-4 bg-white/90 backdrop-blur text-slate-700 px-4 py-2 rounded-full font-bold shadow-md hover:bg-white hover:text-indigo-600 transition-all flex items-center gap-2">
+                                        <RefreshIcon /> 重試/生成
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Sticky Action Buttons */}
+                            <div className="fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-md border-t border-slate-200 p-4 z-50 flex justify-center gap-4 shadow-[0_-5px_10px_rgba(0,0,0,0.05)]">
+                                <div className="max-w-4xl w-full flex gap-4">
+                                    <button onClick={() => setAppStep(AppStep.UPLOAD)} className="flex-1 py-4 border-2 border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all shadow-sm">← 返回修改設定</button>
+                                    <button onClick={() => setAppStep(AppStep.STICKER_CONFIG)} className="flex-[2] py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-black text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all flex items-center justify-center gap-2">確認，下一步：配置貼圖文案 →</button>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                }
+
+                {
+                    appStep === AppStep.STICKER_CONFIG && (
+                        <div className="animate-fade-in-up mt-2 max-w-6xl mx-auto">
+                            <div className="flex justify-between items-end mb-8">
+                                <div>
+                                    <h2 className="text-3xl font-black text-slate-800">配置您的貼圖內容 📝</h2>
+                                    <p className="text-slate-500 mt-2">設定張數，並輸入您想好的文案。</p>
+                                </div>
+                                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex gap-4 items-center">
+                                    <div className="flex gap-2 items-center">
+                                        <span className="text-xs font-bold text-slate-400">數量:</span>
+                                        <select value={stickerQuantity} onChange={(e) => handleQuantityChange(Number(e.target.value) as StickerQuantity)} className="bg-slate-50 border-none rounded-lg font-bold text-slate-700 focus:ring-2 focus:ring-indigo-200 py-2">
+                                            {validQuantities.map(n => <option key={n} value={n}>{n} 張</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                <div className="lg:col-span-1 space-y-6">
+                                    <div className="bg-gradient-to-br from-indigo-50 to-white p-6 rounded-3xl border border-indigo-100 shadow-sm sticky top-24">
+                                        <div className="flex items-center gap-2 mb-4"><span className="text-2xl">🧠</span><h3 className="font-bold text-slate-800">批量智慧輸入 (Smart Batch)</h3></div>
+                                        <p className="text-xs text-slate-500 mb-4">直接貼上您的筆記 (例如: "1.早安 2.晚安 3.謝謝")，AI 會自動分析語意，並自動產生對應的英文動作指令 (Prompt)。</p>
+
+                                        <div className="mb-4 flex items-center gap-2 p-2 bg-indigo-100/50 rounded-lg">
+                                            <input
+                                                type="checkbox"
+                                                id="noTextMode"
+                                                checked={!includeText}
+                                                onChange={(e) => setIncludeText(!e.target.checked)}
+                                                className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300"
+                                            />
+                                            <label htmlFor="noTextMode" className="text-xs font-bold text-indigo-800 cursor-pointer select-none flex-1">
+                                                不生成文字 (No Text Mode)
+                                            </label>
+                                        </div>
+
+                                        <textarea value={smartInputText} onChange={(e) => setSmartInputText(e.target.value)} className="w-full h-40 p-4 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-400 outline-none resize-none bg-white mb-4" placeholder="在此貼上您的想法..." />
+                                        <button onClick={handleSmartInput} disabled={!smartInputText.trim() || isProcessing} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"><MagicWandIcon /> 分析並自動填入</button>
+                                    </div>
+                                </div>
+
+                                <div className="lg:col-span-2 space-y-4 pb-32">
+                                    {stickerConfigs.map((config, idx) => (
+                                        <div key={config.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex gap-4 items-start group hover:border-indigo-200 transition-colors">
+                                            <div className="w-8 h-8 flex-shrink-0 bg-slate-100 rounded-full flex items-center justify-center font-black text-slate-400 text-xs">{idx + 1}</div>
+                                            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">文字 (Text)</label>
+                                                    <div className="flex gap-2">
+                                                        <input type="text" value={config.text} onChange={(e) => { const newConfigs = [...stickerConfigs]; newConfigs[idx].text = e.target.value; setStickerConfigs(newConfigs); }} className="flex-1 p-2 bg-slate-50 rounded-lg border-none text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-200" placeholder="無文字" disabled={!includeText} />
+                                                        <button onClick={() => { const newConfigs = [...stickerConfigs]; newConfigs[idx].showText = !newConfigs[idx].showText; setStickerConfigs(newConfigs); }} className={`px-3 rounded-lg text-xs font-bold transition-colors ${config.showText ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`} disabled={!includeText}>{config.showText ? 'ON' : 'OFF'}</button>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">動作指令 (Action Prompt)</label>
+                                                    <div className="flex flex-col gap-2">
+                                                        {/* Chinese Action Description & Translation */}
+                                                        <div className="flex gap-2">
+                                                            <input
+                                                                type="text"
+                                                                value={config.emotionPromptCN || ""}
+                                                                onChange={(e) => { const newConfigs = [...stickerConfigs]; newConfigs[idx].emotionPromptCN = e.target.value; setStickerConfigs(newConfigs); }}
+                                                                className="flex-1 p-2 bg-slate-50 rounded-lg border-none text-sm text-slate-600 focus:ring-2 focus:ring-indigo-200"
+                                                                placeholder="中文動作描述 (例如: 跌倒)"
+                                                            />
+                                                            <button
+                                                                onClick={() => handleTranslatePrompt(config.id, config.emotionPromptCN || "")}
+                                                                disabled={optimizingId === config.id || !config.emotionPromptCN}
+                                                                className="px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-colors flex items-center justify-center font-bold text-xs border border-indigo-200"
+                                                                title="自動翻譯成英文 Prompt"
+                                                            >
+                                                                {optimizingId === config.id ? (
+                                                                    <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                                                                ) : (
+                                                                    <span>→ 翻譯</span>
+                                                                )}
+                                                            </button>
+                                                        </div>
+
+                                                        {/* English Visual Prompt & Optimize */}
+                                                        <div className="flex gap-2">
+                                                            <input
+                                                                type="text"
+                                                                value={config.emotionPrompt}
+                                                                onChange={(e) => { const newConfigs = [...stickerConfigs]; newConfigs[idx].emotionPrompt = e.target.value; setStickerConfigs(newConfigs); }}
+                                                                className="w-full p-2 bg-slate-50 rounded-lg border-none text-sm text-slate-600 focus:ring-2 focus:ring-indigo-200"
+                                                                placeholder="English Visual Prompt"
+                                                            />
+                                                            <button
+                                                                onClick={() => handleOptimizePrompt(config.id, config.text)}
+                                                                disabled={optimizingId === config.id || !config.text}
+                                                                className="px-3 bg-purple-50 hover:bg-purple-100 text-purple-600 rounded-lg transition-colors flex items-center justify-center"
+                                                                title="AI 根據文字自動產生畫面"
+                                                            >
+                                                                {optimizingId === config.id ? (
+                                                                    <div className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
+                                                                ) : (
+                                                                    <span className="text-xs font-bold whitespace-nowrap">✨ AI</span>
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
-                                    )}
+                                    ))}
+                                    <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-40 flex justify-center shadow-[0_-5px_10px_rgba(0,0,0,0.05)]">
+                                        <button onClick={handleGenerateStickers} className="max-w-md w-full py-4 bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-full font-black text-xl shadow-xl hover:scale-105 transition-transform flex items-center justify-center gap-2">✨ 開始生成貼圖 (Generate)</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                }
 
-                                    {inputMode !== 'UPLOAD_SHEET' && (
-                                        <button onClick={handleGenerateCharacter} disabled={isProcessing} className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-black text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                                            {isProcessing ? (<><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>AI 設計中...</>) : (<>開始設計角色 ✨</>)}
+                {
+                    appStep === AppStep.SHEET_EDITOR && rawSheetUrls.length > 0 && (
+                        <div className="animate-fade-in-up mt-2 h-[calc(100vh-140px)] flex flex-col">
+                            {/* ... (Sheet Editor code remains same) ... */}
+                            <div className="flex justify-between items-center mb-4 px-2">
+                                <h2 className="text-2xl font-black text-slate-800">底圖檢查與修復 🛠️</h2>
+                                <div className="flex gap-4">
+                                    <button onClick={handleOpenSheetMagicEditor} className="px-4 py-2 bg-purple-100 text-purple-700 rounded-xl font-bold hover:bg-purple-200 transition-colors flex items-center gap-2"><MagicWandIcon /> 魔法修復 (Magic Edit)</button>
+                                    <button
+                                        onClick={handleAutoProcess}
+                                        disabled={!isOpenCVReady}
+                                        className={`px-6 py-2 rounded-xl font-bold shadow-lg transition-all flex items-center gap-2
+                                ${isOpenCVReady ? 'bg-emerald-500 text-white hover:bg-emerald-600 hover:-translate-y-0.5' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                                    >
+                                        <span className="text-xl">🟢</span>
+                                        {isOpenCVReady ? '綠幕自動切割 (OpenCV)' : '載入切割模組中...'}
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="flex-1 bg-slate-900 rounded-3xl overflow-hidden relative flex items-center justify-center border-4 border-slate-200">
+                                <img src={rawSheetUrls[currentSheetIndex]} alt="Sheet" className="max-w-full max-h-full object-contain shadow-2xl" />
+                                {rawSheetUrls.length > 1 && (
+                                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-md rounded-full p-2 flex gap-2">
+                                        {rawSheetUrls.map((_, idx) => (
+                                            <button key={idx} onClick={() => setCurrentSheetIndex(idx)} className={`w-3 h-3 rounded-full transition-all ${currentSheetIndex === idx ? 'bg-white scale-125' : 'bg-white/30 hover:bg-white/50'}`} />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )
+                }
+
+                {
+                    appStep === AppStep.STICKER_PROCESSING && (
+                        <div className="animate-fade-in-up mt-2">
+                            {/* ... (Sticker Processing code remains same) ... */}
+                            <div className="flex flex-col md:flex-row justify-between items-end md:items-center mb-6 gap-4">
+                                <div>
+                                    <h2 className="text-3xl font-black text-slate-800">您的專屬貼圖完成啦！🎉</h2>
+                                    <p className="text-slate-500 mt-1">點擊下載全部，或對單張貼圖進行微調。</p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            value={zipFileName}
+                                            onChange={(e) => setZipFileName(e.target.value)}
+                                            className="pl-3 pr-9 py-3 rounded-xl border border-slate-200 shadow-sm focus:ring-2 focus:ring-green-400 outline-none text-sm font-bold w-40 text-slate-700"
+                                            placeholder="MyStickers"
+                                        />
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold pointer-events-none">.zip</span>
+                                    </div>
+                                    {stickerType === 'EMOJI' && (
+                                        <button
+                                            onClick={async () => {
+                                                if (!finalStickers[0]) return;
+                                                const url = await generateTabImage(finalStickers[0].url);
+                                                const a = document.createElement('a'); a.href = url; a.download = 'tab.png'; a.click();
+                                            }}
+                                            className="px-4 py-3 bg-white border-2 border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm whitespace-nowrap"
+                                        >
+                                            生成 Tab 縮圖 (96x74)
                                         </button>
                                     )}
+                                    <button onClick={() => generateFrameZip(finalStickers, zipFileName || "MyStickers", finalStickers.find(s => s.id === mainStickerId)?.url, stickerPackageInfo || undefined, stickerType)} className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform hover:-translate-y-1 whitespace-nowrap"><DownloadIcon /> 下載全部</button>
                                 </div>
                             </div>
-                        )}
-                    </div>
-                )}
-
-                {appStep === AppStep.CANDIDATE_SELECTION && generatedChar && (
-                    <div className="animate-fade-in-up mt-2 max-w-4xl mx-auto pb-32">
-                        {/* ... (Previous Candidate Selection Code) ... */}
-                        <div className="text-center mb-8">
-                            <h2 className="text-3xl font-black text-slate-800">您的專屬 IP 角色誕生了！✨</h2>
-                            <p className="text-slate-500 mt-2">請確認角色設計，滿意後我們將以此為基礎製作整套貼圖。</p>
-                        </div>
-
-                        <div className="bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-slate-100 p-6 mb-8">
-                            {/* Fixed Height Container to prevent full-screen takeover */}
-                            <div className="w-full h-[50vh] flex items-center justify-center bg-gray-50 rounded-2xl relative group border border-slate-100 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgBDAm9BGDWAAJyRCgLaBCAAgXwixzAS0pgAAAABJRU5ErkJggg==')]">
-                                <img src={generatedChar.url} alt="Character" className="h-full w-full object-contain shadow-lg" />
-                                <button onClick={handleGenerateCharacter} className="absolute top-4 right-4 bg-white/90 backdrop-blur text-slate-700 px-4 py-2 rounded-full font-bold shadow-md hover:bg-white hover:text-indigo-600 transition-all flex items-center gap-2">
-                                    <RefreshIcon /> 重試/生成
-                                </button>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
+                                {finalStickers.map((sticker, idx) => (
+                                    <StickerCard key={sticker.id} sticker={sticker} countdown={0} isMain={sticker.id === mainStickerId} onRetry={() => { }} onDownload={() => { const a = document.createElement('a'); a.href = sticker.url; a.download = `sticker_${idx + 1}.png`; a.click(); }} onEdit={() => handleMagicEdit(sticker.id)} onSetMain={() => setMainStickerId(sticker.id)} />
+                                ))}
                             </div>
-                        </div>
-
-                        {/* Sticky Action Buttons */}
-                        <div className="fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-md border-t border-slate-200 p-4 z-50 flex justify-center gap-4 shadow-[0_-5px_10px_rgba(0,0,0,0.05)]">
-                            <div className="max-w-4xl w-full flex gap-4">
-                                <button onClick={() => setAppStep(AppStep.UPLOAD)} className="flex-1 py-4 border-2 border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all shadow-sm">← 返回修改設定</button>
-                                <button onClick={() => setAppStep(AppStep.STICKER_CONFIG)} className="flex-[2] py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-black text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all flex items-center justify-center gap-2">確認，下一步：配置貼圖文案 →</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {appStep === AppStep.STICKER_CONFIG && (
-                    <div className="animate-fade-in-up mt-2 max-w-6xl mx-auto">
-                        <div className="flex justify-between items-end mb-8">
-                            <div>
-                                <h2 className="text-3xl font-black text-slate-800">配置您的貼圖內容 📝</h2>
-                                <p className="text-slate-500 mt-2">設定張數，並輸入您想好的文案。</p>
-                            </div>
-                            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex gap-4 items-center">
-                                <div className="flex gap-2 items-center">
-                                    <span className="text-xs font-bold text-slate-400">數量:</span>
-                                    <select value={stickerQuantity} onChange={(e) => handleQuantityChange(Number(e.target.value) as StickerQuantity)} className="bg-slate-50 border-none rounded-lg font-bold text-slate-700 focus:ring-2 focus:ring-indigo-200 py-2">
-                                        {validQuantities.map(n => <option key={n} value={n}>{n} 張</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div className="lg:col-span-1 space-y-6">
-                                <div className="bg-gradient-to-br from-indigo-50 to-white p-6 rounded-3xl border border-indigo-100 shadow-sm sticky top-24">
-                                    <div className="flex items-center gap-2 mb-4"><span className="text-2xl">🧠</span><h3 className="font-bold text-slate-800">批量智慧輸入 (Smart Batch)</h3></div>
-                                    <p className="text-xs text-slate-500 mb-4">直接貼上您的筆記 (例如: "1.早安 2.晚安 3.謝謝")，AI 會自動分析語意，並自動產生對應的英文動作指令 (Prompt)。</p>
-
-                                    <div className="mb-4 flex items-center gap-2 p-2 bg-indigo-100/50 rounded-lg">
-                                        <input
-                                            type="checkbox"
-                                            id="noTextMode"
-                                            checked={!includeText}
-                                            onChange={(e) => setIncludeText(!e.target.checked)}
-                                            className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300"
-                                        />
-                                        <label htmlFor="noTextMode" className="text-xs font-bold text-indigo-800 cursor-pointer select-none flex-1">
-                                            不生成文字 (No Text Mode)
-                                        </label>
-                                    </div>
-
-                                    <textarea value={smartInputText} onChange={(e) => setSmartInputText(e.target.value)} className="w-full h-40 p-4 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-400 outline-none resize-none bg-white mb-4" placeholder="在此貼上您的想法..." />
-                                    <button onClick={handleSmartInput} disabled={!smartInputText.trim() || isProcessing} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"><MagicWandIcon /> 分析並自動填入</button>
-                                </div>
-                            </div>
-
-                            <div className="lg:col-span-2 space-y-4 pb-32">
-                                {stickerConfigs.map((config, idx) => (
-                                    <div key={config.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex gap-4 items-start group hover:border-indigo-200 transition-colors">
-                                        <div className="w-8 h-8 flex-shrink-0 bg-slate-100 rounded-full flex items-center justify-center font-black text-slate-400 text-xs">{idx + 1}</div>
-                                        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">文字 (Text)</label>
-                                                <div className="flex gap-2">
-                                                    <input type="text" value={config.text} onChange={(e) => { const newConfigs = [...stickerConfigs]; newConfigs[idx].text = e.target.value; setStickerConfigs(newConfigs); }} className="flex-1 p-2 bg-slate-50 rounded-lg border-none text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-200" placeholder="無文字" disabled={!includeText} />
-                                                    <button onClick={() => { const newConfigs = [...stickerConfigs]; newConfigs[idx].showText = !newConfigs[idx].showText; setStickerConfigs(newConfigs); }} className={`px-3 rounded-lg text-xs font-bold transition-colors ${config.showText ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`} disabled={!includeText}>{config.showText ? 'ON' : 'OFF'}</button>
-                                                </div>
+                            {stickerPackageInfo && (
+                                <div className="bg-white rounded-2xl border-2 border-indigo-100 p-8 shadow-sm relative overflow-hidden group">
+                                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><div className="text-9xl">📦</div></div>
+                                    <div className="relative z-10">
+                                        <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-2"><span className="bg-indigo-100 text-indigo-600 p-2 rounded-lg text-xl">💡</span>貼圖上架資訊助手<span className="text-xs font-normal text-slate-400 bg-slate-100 px-2 py-1 rounded ml-2">AI 自動生成</span></h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div className="space-y-4">
+                                                <div className="flex items-center gap-2 mb-2"><span className="w-2 h-2 rounded-full bg-indigo-500"></span><span className="text-sm font-bold text-slate-500 uppercase tracking-widest">中文資訊 (Traditional Chinese)</span></div>
+                                                <div><label className="block text-xs font-bold text-slate-400 mb-1">貼圖標題 (Title)</label><div className="flex gap-2"><input readOnly value={stickerPackageInfo.title.zh} className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200" /><CopyBtn text={stickerPackageInfo.title.zh} /></div></div>
+                                                <div><label className="block text-xs font-bold text-slate-400 mb-1">貼圖說明 (Description)</label><div className="relative"><textarea readOnly value={stickerPackageInfo.description.zh} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200 h-24 resize-none" /><div className="absolute bottom-3 right-3"><CopyBtn text={stickerPackageInfo.description.zh} /></div></div></div>
                                             </div>
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">動作指令 (Action Prompt)</label>
-                                                <div className="flex flex-col gap-2">
-                                                    {/* Chinese Action Description & Translation */}
-                                                    <div className="flex gap-2">
-                                                        <input
-                                                            type="text"
-                                                            value={config.emotionPromptCN || ""}
-                                                            onChange={(e) => { const newConfigs = [...stickerConfigs]; newConfigs[idx].emotionPromptCN = e.target.value; setStickerConfigs(newConfigs); }}
-                                                            className="flex-1 p-2 bg-slate-50 rounded-lg border-none text-sm text-slate-600 focus:ring-2 focus:ring-indigo-200"
-                                                            placeholder="中文動作描述 (例如: 跌倒)"
-                                                        />
-                                                        <button
-                                                            onClick={() => handleTranslatePrompt(config.id, config.emotionPromptCN || "")}
-                                                            disabled={optimizingId === config.id || !config.emotionPromptCN}
-                                                            className="px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-colors flex items-center justify-center font-bold text-xs border border-indigo-200"
-                                                            title="自動翻譯成英文 Prompt"
-                                                        >
-                                                            {optimizingId === config.id ? (
-                                                                <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
-                                                            ) : (
-                                                                <span>→ 翻譯</span>
-                                                            )}
-                                                        </button>
-                                                    </div>
-
-                                                    {/* English Visual Prompt & Optimize */}
-                                                    <div className="flex gap-2">
-                                                        <input
-                                                            type="text"
-                                                            value={config.emotionPrompt}
-                                                            onChange={(e) => { const newConfigs = [...stickerConfigs]; newConfigs[idx].emotionPrompt = e.target.value; setStickerConfigs(newConfigs); }}
-                                                            className="w-full p-2 bg-slate-50 rounded-lg border-none text-sm text-slate-600 focus:ring-2 focus:ring-indigo-200"
-                                                            placeholder="English Visual Prompt"
-                                                        />
-                                                        <button
-                                                            onClick={() => handleOptimizePrompt(config.id, config.text)}
-                                                            disabled={optimizingId === config.id || !config.text}
-                                                            className="px-3 bg-purple-50 hover:bg-purple-100 text-purple-600 rounded-lg transition-colors flex items-center justify-center"
-                                                            title="AI 根據文字自動產生畫面"
-                                                        >
-                                                            {optimizingId === config.id ? (
-                                                                <div className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
-                                                            ) : (
-                                                                <span className="text-xs font-bold whitespace-nowrap">✨ AI</span>
-                                                            )}
-                                                        </button>
-                                                    </div>
-                                                </div>
+                                            <div className="space-y-4 flex flex-col">
+                                                <div className="flex items-center gap-2 mb-2"><span className="w-2 h-2 rounded-full bg-purple-500"></span><span className="text-sm font-bold text-slate-500 uppercase tracking-widest">英文資訊 (English)</span></div>
+                                                <div><label className="block text-xs font-bold text-slate-400 mb-1">Title</label><div className="flex gap-2"><input readOnly value={stickerPackageInfo.title.en} className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-purple-200" /><CopyBtn text={stickerPackageInfo.title.en} label="Copy" successLabel="Copied" /></div></div>
+                                                <div><label className="block text-xs font-bold text-slate-400 mb-1">Description</label><div className="relative"><textarea readOnly value={stickerPackageInfo.description.en} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 outline-none focus:ring-2 focus:ring-purple-200 h-24 resize-none" /><div className="absolute bottom-3 right-3"><CopyBtn text={stickerPackageInfo.description.en} label="Copy" successLabel="Copied" /></div></div></div>
+                                                <div className="flex-1 flex items-end justify-end mt-4"><a href="https://creator.line.me/zh-hant/" target="_blank" rel="noreferrer" className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-bold bg-indigo-50 hover:bg-indigo-100 px-6 py-3 rounded-xl transition-colors shadow-sm hover:shadow-md"><span>🚀</span> 前往 LINE Creators Market 上架<ExternalLinkIcon /></a></div>
                                             </div>
                                         </div>
                                     </div>
-                                ))}
-                                <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-40 flex justify-center shadow-[0_-5px_10px_rgba(0,0,0,0.05)]">
-                                    <button onClick={handleGenerateStickers} className="max-w-md w-full py-4 bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-full font-black text-xl shadow-xl hover:scale-105 transition-transform flex items-center justify-center gap-2">✨ 開始生成貼圖 (Generate)</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {appStep === AppStep.SHEET_EDITOR && rawSheetUrls.length > 0 && (
-                    <div className="animate-fade-in-up mt-2 h-[calc(100vh-140px)] flex flex-col">
-                        {/* ... (Sheet Editor code remains same) ... */}
-                        <div className="flex justify-between items-center mb-4 px-2">
-                            <h2 className="text-2xl font-black text-slate-800">底圖檢查與修復 🛠️</h2>
-                            <div className="flex gap-4">
-                                <button onClick={handleOpenSheetMagicEditor} className="px-4 py-2 bg-purple-100 text-purple-700 rounded-xl font-bold hover:bg-purple-200 transition-colors flex items-center gap-2"><MagicWandIcon /> 魔法修復 (Magic Edit)</button>
-                                <button
-                                    onClick={handleAutoProcess}
-                                    disabled={!isOpenCVReady}
-                                    className={`px-6 py-2 rounded-xl font-bold shadow-lg transition-all flex items-center gap-2
-                                ${isOpenCVReady ? 'bg-emerald-500 text-white hover:bg-emerald-600 hover:-translate-y-0.5' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
-                                >
-                                    <span className="text-xl">🟢</span>
-                                    {isOpenCVReady ? '綠幕自動切割 (OpenCV)' : '載入切割模組中...'}
-                                </button>
-                            </div>
-                        </div>
-                        <div className="flex-1 bg-slate-900 rounded-3xl overflow-hidden relative flex items-center justify-center border-4 border-slate-200">
-                            <img src={rawSheetUrls[currentSheetIndex]} alt="Sheet" className="max-w-full max-h-full object-contain shadow-2xl" />
-                            {rawSheetUrls.length > 1 && (
-                                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-md rounded-full p-2 flex gap-2">
-                                    {rawSheetUrls.map((_, idx) => (
-                                        <button key={idx} onClick={() => setCurrentSheetIndex(idx)} className={`w-3 h-3 rounded-full transition-all ${currentSheetIndex === idx ? 'bg-white scale-125' : 'bg-white/30 hover:bg-white/50'}`} />
-                                    ))}
                                 </div>
                             )}
-                        </div>
-                    </div>
-                )}
-
-                {appStep === AppStep.STICKER_PROCESSING && (
-                    <div className="animate-fade-in-up mt-2">
-                        {/* ... (Sticker Processing code remains same) ... */}
-                        <div className="flex flex-col md:flex-row justify-between items-end md:items-center mb-6 gap-4">
-                            <div>
-                                <h2 className="text-3xl font-black text-slate-800">您的專屬貼圖完成啦！🎉</h2>
-                                <p className="text-slate-500 mt-1">點擊下載全部，或對單張貼圖進行微調。</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        value={zipFileName}
-                                        onChange={(e) => setZipFileName(e.target.value)}
-                                        className="pl-3 pr-9 py-3 rounded-xl border border-slate-200 shadow-sm focus:ring-2 focus:ring-green-400 outline-none text-sm font-bold w-40 text-slate-700"
-                                        placeholder="MyStickers"
-                                    />
-                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold pointer-events-none">.zip</span>
-                                </div>
-                                {stickerType === 'EMOJI' && (
-                                    <button
-                                        onClick={async () => {
-                                            if (!finalStickers[0]) return;
-                                            const url = await generateTabImage(finalStickers[0].url);
-                                            const a = document.createElement('a'); a.href = url; a.download = 'tab.png'; a.click();
-                                        }}
-                                        className="px-4 py-3 bg-white border-2 border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm whitespace-nowrap"
-                                    >
-                                        生成 Tab 縮圖 (96x74)
-                                    </button>
-                                )}
-                                <button onClick={() => generateFrameZip(finalStickers, zipFileName || "MyStickers", finalStickers.find(s => s.id === mainStickerId)?.url, stickerPackageInfo || undefined, stickerType)} className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform hover:-translate-y-1 whitespace-nowrap"><DownloadIcon /> 下載全部</button>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
-                            {finalStickers.map((sticker, idx) => (
-                                <StickerCard key={sticker.id} sticker={sticker} countdown={0} isMain={sticker.id === mainStickerId} onRetry={() => { }} onDownload={() => { const a = document.createElement('a'); a.href = sticker.url; a.download = `sticker_${idx + 1}.png`; a.click(); }} onEdit={() => handleMagicEdit(sticker.id)} onSetMain={() => setMainStickerId(sticker.id)} />
-                            ))}
-                        </div>
-                        {stickerPackageInfo && (
-                            <div className="bg-white rounded-2xl border-2 border-indigo-100 p-8 shadow-sm relative overflow-hidden group">
-                                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><div className="text-9xl">📦</div></div>
-                                <div className="relative z-10">
-                                    <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-2"><span className="bg-indigo-100 text-indigo-600 p-2 rounded-lg text-xl">💡</span>貼圖上架資訊助手<span className="text-xs font-normal text-slate-400 bg-slate-100 px-2 py-1 rounded ml-2">AI 自動生成</span></h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        <div className="space-y-4">
-                                            <div className="flex items-center gap-2 mb-2"><span className="w-2 h-2 rounded-full bg-indigo-500"></span><span className="text-sm font-bold text-slate-500 uppercase tracking-widest">中文資訊 (Traditional Chinese)</span></div>
-                                            <div><label className="block text-xs font-bold text-slate-400 mb-1">貼圖標題 (Title)</label><div className="flex gap-2"><input readOnly value={stickerPackageInfo.title.zh} className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200" /><CopyBtn text={stickerPackageInfo.title.zh} /></div></div>
-                                            <div><label className="block text-xs font-bold text-slate-400 mb-1">貼圖說明 (Description)</label><div className="relative"><textarea readOnly value={stickerPackageInfo.description.zh} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200 h-24 resize-none" /><div className="absolute bottom-3 right-3"><CopyBtn text={stickerPackageInfo.description.zh} /></div></div></div>
-                                        </div>
-                                        <div className="space-y-4 flex flex-col">
-                                            <div className="flex items-center gap-2 mb-2"><span className="w-2 h-2 rounded-full bg-purple-500"></span><span className="text-sm font-bold text-slate-500 uppercase tracking-widest">英文資訊 (English)</span></div>
-                                            <div><label className="block text-xs font-bold text-slate-400 mb-1">Title</label><div className="flex gap-2"><input readOnly value={stickerPackageInfo.title.en} className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-purple-200" /><CopyBtn text={stickerPackageInfo.title.en} label="Copy" successLabel="Copied" /></div></div>
-                                            <div><label className="block text-xs font-bold text-slate-400 mb-1">Description</label><div className="relative"><textarea readOnly value={stickerPackageInfo.description.en} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 outline-none focus:ring-2 focus:ring-purple-200 h-24 resize-none" /><div className="absolute bottom-3 right-3"><CopyBtn text={stickerPackageInfo.description.en} label="Copy" successLabel="Copied" /></div></div></div>
-                                            <div className="flex-1 flex items-end justify-end mt-4"><a href="https://creator.line.me/zh-hant/" target="_blank" rel="noreferrer" className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-bold bg-indigo-50 hover:bg-indigo-100 px-6 py-3 rounded-xl transition-colors shadow-sm hover:shadow-md"><span>🚀</span> 前往 LINE Creators Market 上架<ExternalLinkIcon /></a></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </main>
-            {isProcessing && <Loader message={loadingMsg} />}
-            <MagicEditor isOpen={magicEditorOpen} imageUrl={editorImage} onClose={() => setMagicEditorOpen(false)} onGenerate={handleMagicGenerate} isProcessing={isProcessing} isAnimated={false} />
-            <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
-        </div>
+                        </main>
+    {isProcessing && <Loader message={loadingMsg} />}
+                <MagicEditor isOpen={magicEditorOpen} imageUrl={editorImage} onClose={() => setMagicEditorOpen(false)} onGenerate={handleMagicGenerate} isProcessing={isProcessing} isAnimated={false} />
+                <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
+        </div >
     );
 }

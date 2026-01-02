@@ -301,16 +301,17 @@ export const processGreenScreenAndSlice = async (
                                         const availableW = targetW - (padding * 2);
                                         const availableH = targetH - (padding * 2);
 
-                                        // Calculate Scale
+                                        // Calculate Scale - UPDATED: Support for 'COVER' mode for Emojis
                                         let scale;
                                         if (padding === 0) {
-                                            // EMOJI MODE: Maximize ("Touch edges") but keep aspect ratio.
-                                            // Math.min makes it fit completely within the box.
-                                            scale = Math.min(availableW / absRect.width, availableH / absRect.height);
-                                            // Note: 'Full Bleed' in prompt tries to fill rect. 
-                                            // Scale ensures it fits exactly into 180x180 without cropping.
+                                            // EMOJI MODE: COVER Logic (Full Bleed)
+                                            // We want to fill the entire 180x180 square.
+                                            // Use Math.max to ensure the image covers the target dimension.
+                                            // This might crop top/bottom or sides if aspect ratio doesn't match perfectly.
+                                            scale = Math.max(availableW / absRect.width, availableH / absRect.height);
                                         } else {
-                                            // STICKER MODE: Contain with padding
+                                            // STICKER MODE: CONTAIN Logic (Padding Preserved)
+                                            // Fit entirely within the box with padding.
                                             scale = Math.min(availableW / absRect.width, availableH / absRect.height);
                                         }
 

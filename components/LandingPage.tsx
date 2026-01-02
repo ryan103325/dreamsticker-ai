@@ -31,8 +31,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
 
             <div className="max-w-md w-full bg-white/10 backdrop-blur-lg border border-white/20 rounded-3xl p-8 shadow-2xl relative z-10">
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-2xl mb-4 shadow-lg transform rotate-3 hover:rotate-6 transition-transform">
-                        <StickerIcon />
+                    <div className="inline-flex items-center justify-center w-24 h-24 bg-white/10 rounded-3xl mb-4 shadow-lg transform rotate-3 hover:rotate-6 transition-transform overflow-hidden backdrop-blur-sm border border-white/20">
+                        <img src="./logo.png" alt="DreamSticker AI" className="w-full h-full object-cover" />
                     </div>
                     <h1 className="text-4xl font-black mb-2 bg-clip-text text-transparent bg-gradient-to-r from-white to-indigo-200">DreamSticker AI</h1>
                     <p className="text-indigo-200">打造您的專屬 Line 貼圖 IP</p>

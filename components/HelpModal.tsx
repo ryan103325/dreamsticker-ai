@@ -111,8 +111,8 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                         <ol className="list-decimal list-inside text-sm text-amber-700 space-y-1 bg-white/50 p-3 rounded-lg">
                                             <li>選擇 <strong>📂 上傳底圖</strong> 模式。</li>
                                             <li>設定好您的網格規格 (例如 8張圖 = 4欄x2列)。</li>
-                                            <li>上傳您的圖片 (建議背景為純綠色 <code>#00FF00</code>)。</li>
-                                            <li>系統會跳過 AI 生成步驟，直接進入 <strong>OpenCV 自動切割</strong> 與 <strong>上架打包</strong> 流程。</li>
+                                            <li>上傳您的圖片 (建議背景為純綠色)。</li>
+                                            <li>系統會跳過 AI 生成步驟，直接協助您進行 <strong>自動切割</strong> 與 <strong>上架打包</strong>。</li>
                                         </ol>
                                         <div className="mt-4 pt-4 border-t border-amber-200/50 text-amber-900 text-xs">
                                             <strong>🎉 最新支援畫風：</strong> 吉卜力風 (宮崎駿)、3D 盲盒公仔、日系賽璐珞、像素風...等 8 種風格自由切換！
@@ -205,14 +205,14 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                             </div>
 
                             <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-6">
-                                <h3 className="font-bold text-emerald-900 text-lg mb-2 flex items-center gap-2">🟢 OpenCV 自動綠幕切割</h3>
+                                <h3 className="font-bold text-emerald-900 text-lg mb-2 flex items-center gap-2">🟢 自動綠幕切割 (Auto Slicing)</h3>
                                 <p className="text-sm text-emerald-800">
-                                    我們內建了 <strong>OpenCV.js</strong> 影像處理引擎。
+                                    系統內建智慧影像處理引擎，能幫您自動去背與裁切。
                                 </p>
                                 <ul className="list-disc list-inside mt-3 text-sm text-emerald-700 space-y-1">
-                                    <li>系統會自動偵測 <code>#00FF00</code> 綠幕背景。</li>
-                                    <li>自動識別每個貼圖的輪廓 (Contour)。</li>
-                                    <li>自動裁切並轉為透明背景 PNG。</li>
+                                    <li>全自動偵測<strong>綠幕背景</strong>。</li>
+                                    <li>自動識別每一個角色的範圍。</li>
+                                    <li>自動裁切並轉為<strong>透明背景貼圖</strong>。</li>
                                     <li><strong>注意</strong>：若您的角色本身是綠色的，可能會被誤刪，請使用魔法修復將背景改色，或在 Prompt 中避開綠色。</li>
                                 </ul>
                             </div>
@@ -262,7 +262,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                     </li>
                                     <li>
                                         <strong>Q: 切割出來是空的？</strong><br />
-                                        A: 可能是 OpenCV 載入失敗，請重新整理網頁。或者背景綠色不夠純，請使用魔法修復將背景塗成純綠色。
+                                        A: 可能是影像處理引擎載入失敗，請重新整理網頁。或者背景綠色不夠純，請使用魔法修復將背景塗成純綠色。
                                     </li>
                                     <li>
                                         <strong>Q: Pro 模型生成失敗？</strong><br />
