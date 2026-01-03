@@ -26,7 +26,9 @@ export const getApiKey = () => {
         const stored = localStorage.getItem('gemini_api_key');
         if (stored) return stored;
     }
-    return process.env.VITE_GEMINI_API_KEY || process.env.API_KEY || ''; // Fallback to env
+    // Defense: Ensure we only use explicitly set keys.
+    // REMOVED: process.env.VITE_GEMINI_API_KEY fallback as per security policy.
+    return '';
 };
 
 const getAI = () => {

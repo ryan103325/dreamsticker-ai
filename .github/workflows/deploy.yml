@@ -33,8 +33,6 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # If you need to Bake secrets into the build (Warning: visible in client code)
-          # VITE_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CI: true
 
       - name: Upload artifact
