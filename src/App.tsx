@@ -1043,38 +1043,34 @@ export const App = () => {
 
     return (
         <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-20">
-            <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm">
-                <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => window.location.reload()}>
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg overflow-hidden">
+            {/* Navbar */}
+            <nav className={`sticky top-0 z-40 px-3 sm:px-6 py-4 flex justify-between items-center shadow-sm backdrop-blur-md transition-all ${theme === 'dark' ? 'bg-black/80 border-b border-white/10' : 'bg-white/80 border-b border-slate-200'}`}>
+                <div className="flex items-center gap-2 sm:gap-3 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => window.location.reload()}>
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shadow-lg overflow-hidden">
                         <img src="./logo.png" className="w-full h-full object-cover" alt="Logo" />
                     </div>
                     <div>
-                        <h1 className="text-xl font-black text-gray-800 tracking-tight flex items-center gap-2">
-                            DreamSticker
-                            <span className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">AI</span>
+                        <h1 className="text-lg sm:text-xl font-black tracking-tight flex items-center gap-2">
+                            <span className={theme === 'dark' ? 'text-white' : 'text-slate-800'}>DreamSticker</span>
+                            <span className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider hidden sm:inline-block">AI</span>
                         </h1>
                     </div>
                 </div>
                 <div className="flex gap-2">
                     <button
+                        onClick={toggleTheme}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20 border border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'}`}
+                        title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                    >
+                        {theme === 'dark' ? '☀️' : '🌙'}
+                    </button>
+                    <button
                         onClick={() => setSysLang(sysLang === 'zh' ? 'en' : 'zh')}
-                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-lg text-xs font-bold transition-all flex items-center gap-1"
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20 border border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'}`}
                     >
                         <span>🌐</span> {sysLang === 'zh' ? 'EN' : '中'}
                     </button>
-                    <button
-                        onClick={() => {
-                            if (confirm(t('confirmChangeKey'))) {
-                                // clearApiKey(); // No longer needed as we don't store it
-                                window.location.reload();
-                            }
-                        }}
-                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-lg text-xs font-bold transition-all flex items-center gap-1"
-                        title={t('changeKey')}
-                    >
-                        <span>🔑</span> {t('changeKey')}
-                    </button>
-                    <button onClick={() => setHelpOpen(true)} className="p-2 hover:bg-indigo-50 rounded-full text-indigo-600 transition-colors">
+                    <button onClick={() => setHelpOpen(true)} className={`p-2 rounded-full transition-colors ${theme === 'dark' ? 'text-indigo-300 hover:bg-white/10' : 'hover:bg-indigo-50 text-indigo-600'}`}>
                         <HelpIcon />
                     </button>
                 </div>
