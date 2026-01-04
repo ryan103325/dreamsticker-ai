@@ -63,6 +63,25 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                 </p>
                             </div>
 
+                            {/* Product Types Explanation */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="bg-white p-4 rounded-xl border border-gray-200 flex gap-3 items-center shadow-sm">
+                                    <div className="text-2xl bg-indigo-50 p-2 rounded-lg">🖼️</div>
+                                    <div>
+                                        <h4 className="font-bold text-gray-800">一般貼圖 (Stickers)</h4>
+                                        <p className="text-xs text-gray-500 mt-1">標準 W370 x H320，自動加白邊，適合獨立傳送。</p>
+                                    </div>
+                                </div>
+                                <div className="bg-white p-4 rounded-xl border border-pink-200 flex gap-3 items-center shadow-sm relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 bg-pink-500 text-white text-[10px] px-2 py-0.5 rounded-bl-lg font-bold">New</div>
+                                    <div className="text-2xl bg-pink-50 p-2 rounded-lg">😊</div>
+                                    <div>
+                                        <h4 className="font-bold text-gray-800">LINE 表情貼 (Emojis)</h4>
+                                        <p className="text-xs text-gray-500 mt-1">小尺寸 W180 x H180，無白邊(滿版)，可混在文字中。</p>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {/* 創造新角色 */}
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden group">
@@ -234,7 +253,10 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                                         <tbody className="divide-y divide-gray-100">
                                             <tr>
                                                 <td className="p-4 font-mono text-indigo-600">01.png ~ 40.png</td>
-                                                <td className="p-4">符合 LINE 規範的貼圖圖檔 (W370 x H320)</td>
+                                                <td className="p-4">
+                                                    <div className="mb-1"><span className="bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 rounded font-bold mr-2">貼圖</span> W370 x H320 (含白邊)</div>
+                                                    <div><span className="bg-pink-100 text-pink-700 text-xs px-2 py-0.5 rounded font-bold mr-2">表情貼</span> W180 x H180 (無白邊)</div>
+                                                </td>
                                             </tr>
                                             <tr>
                                                 <td className="p-4 font-mono text-indigo-600">main.png</td>
