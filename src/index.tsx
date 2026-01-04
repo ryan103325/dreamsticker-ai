@@ -10,11 +10,15 @@ if (!rootElement) {
 
 import { LanguageProvider } from './LanguageContext';
 
+import { ThemeProvider } from './ThemeContext';
+
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <LanguageProvider>
-      <App />
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
     </LanguageProvider>
   </React.StrictMode>
 );
