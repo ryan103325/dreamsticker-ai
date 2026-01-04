@@ -106,6 +106,37 @@ export const translations = {
         success: "成功",
         processing: "處理中...",
 
+        // Missing App Keys
+        charType: "角色類型",
+        clickUpload: "點擊上傳",
+        uploadSupport: "支援 JPG, PNG 格式",
+        uploadRefImage: "上傳參考圖",
+        descPlaceholder: "描述角色的外觀特徵...",
+        artStyleLabel: "畫風設定",
+        clickUploadSheet: "點擊上傳底圖",
+        uploadSheetSupport: "支援已去背 PNG",
+
+        // Additional Keys
+        descLabel: "外觀描述 (必填)",
+        randomTitle: "隨機產生靈感",
+        sheetQtyLabel: "設定貼圖張數",
+        sheetQtyHint: "(影響切割網格)",
+        previewLabel: "AI 提示詞預覽",
+        copyBtn: "一鍵複製提示詞",
+
+        // Prompt Generator
+        promptGenTitle: "還沒有底圖？ AI 輔助生成提示詞",
+        promptGenSubtitle: "為外部工具產生的 Prompt Generator",
+        promptGenContent: "文字內容",
+        promptGenPlaceholder: "輸入貼圖文字，例如：\n1.早安\n2.晚安\n3.謝謝",
+        promptGenFormat: "智慧格式化",
+        promptGenQuantity: "生成數量",
+        promptGenGrid: "對應網格",
+        promptGenStyle: "畫風設定",
+        promptGenStylePlaceholder: "預設：Q版日本動漫",
+        promptGenPreview: "AI 提示詞預覽",
+        promptGenCopy: "一鍵複製提示詞",
+
         // Loading Messages
         loadingProcessingChar: "正在分析圖片與設計角色 (約需 15-20 秒)...",
         loadingAnalyzingImage: "正在分析圖片內容...",
@@ -217,6 +248,37 @@ export const translations = {
         error: "Error",
         success: "Success",
         processing: "Processing...",
+
+        // Missing App Keys
+        charType: "Character Type",
+        clickUpload: "Click to Upload",
+        uploadSupport: "Support JPG, PNG",
+        uploadRefImage: "Upload Image",
+        descPlaceholder: "Describe appearance...",
+        artStyleLabel: "Art Style",
+        clickUploadSheet: "Click to upload sheet",
+        uploadSheetSupport: "Support transparent PNG",
+
+        // Additional Keys
+        descLabel: "Appearance (Required)",
+        randomTitle: "Random Inspiration",
+        sheetQtyLabel: "Sticker Quantity",
+        sheetQtyHint: "(Affects Grid)",
+        previewLabel: "AI Prompt Preview",
+        copyBtn: "Copy Prompt",
+
+        // Prompt Generator
+        promptGenTitle: "No base image? AI Prompt Generator",
+        promptGenSubtitle: "Prompt Generator for external tools",
+        promptGenContent: "Sticker Text",
+        promptGenPlaceholder: "Enter text, e.g.:\n1. Hi\n2. Bye\n3. Thanks",
+        promptGenFormat: "Smart Format",
+        promptGenQuantity: "Quantity",
+        promptGenGrid: "Grid Layout",
+        promptGenStyle: "Art Style",
+        promptGenStylePlaceholder: "Default: Chibi Anime",
+        promptGenPreview: "Prompt Preview",
+        promptGenCopy: "Copy Prompt",
 
         // Loading Messages
         loadingProcessingChar: "Analyzing image & designing character (approx 15-20s)...",

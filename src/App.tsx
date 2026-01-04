@@ -1314,7 +1314,7 @@ export const App = () => {
                                                             {/* Description */}
                                                             <div>
                                                                 <div className="flex justify-between items-center mb-1">
-                                                                    <label className="text-xs font-bold text-slate-400">外觀描述 (必填)</label>
+                                                                    <label className="text-xs font-bold text-slate-400">{t('descLabel')}</label>
                                                                     <button
                                                                         onClick={() => handleAutoAnalyzeChar(char.id, char.image)}
                                                                         disabled={!char.image || analyzingCharId === char.id}
@@ -1396,7 +1396,7 @@ export const App = () => {
                                                             className={`p-2 rounded-full shadow-lg transition-all active:scale-95 flex items-center gap-2 px-3
                                                 ${diceLoading ? 'bg-slate-100 text-slate-400' : 'bg-white hover:bg-pink-50 text-pink-600 hover:text-pink-700 border border-pink-100'}
                                             `}
-                                                            title="隨機產生靈感"
+                                                            title={t('randomTitle')}
                                                         >
                                                             {diceLoading ? (
                                                                 <div className="w-5 h-5 border-2 border-pink-200 border-t-pink-600 rounded-full animate-spin"></div>
@@ -1428,7 +1428,7 @@ export const App = () => {
                                                     <div className="absolute top-0 left-0 w-1 h-full bg-amber-400"></div>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                                         <div>
-                                                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">設定貼圖張數 <span className="text-amber-500 text-[10px] ml-1">(影響切割網格)</span></label>
+                                                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">{t('sheetQtyLabel')} <span className="text-amber-500 text-[10px] ml-1">{t('sheetQtyHint')}</span></label>
                                                             <div className="flex flex-wrap gap-2">
                                                                 {validQuantities.map(n => (
                                                                     <button key={n} onClick={() => handleQuantityChange(n as StickerQuantity)} className={`w-10 h-10 rounded-xl text-sm font-black transition-all flex items-center justify-center border-2 ${stickerQuantity === n ? 'bg-amber-400 border-amber-400 text-white shadow-lg scale-110' : 'bg-white border-slate-200 text-slate-400 hover:border-amber-200 hover:text-amber-400'}`}>{n}</button>
@@ -1451,8 +1451,8 @@ export const App = () => {
                                                     <div className="flex items-center gap-3">
                                                         <div className="bg-indigo-100 text-indigo-600 p-2 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors"><span className="text-lg">✨</span></div>
                                                         <div>
-                                                            <h4 className="text-base font-bold text-indigo-900">還沒有底圖？ AI 輔助生成提示詞</h4>
-                                                            <p className="text-xs text-indigo-400 mt-0.5">Prompt Generator for external tools</p>
+                                                            <h4 className="text-base font-bold text-indigo-900">{t('promptGenTitle')}</h4>
+                                                            <p className="text-xs text-indigo-400 mt-0.5">{t('promptGenSubtitle')}</p>
                                                         </div>
                                                     </div>
                                                     <div className={`transform transition-transform duration-300 text-indigo-300 ${isPromptGeneratorOpen ? 'rotate-180' : ''}`}>
@@ -1464,15 +1464,15 @@ export const App = () => {
                                                     <div className="p-6 pt-0 border-t border-indigo-50 space-y-6 animate-fade-in">
                                                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-6">
                                                             <div>
-                                                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">文字內容</label>
+                                                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('promptGenContent')}</label>
                                                                 <div className="relative">
-                                                                    <textarea value={promptTextListInput} onChange={e => setPromptTextListInput(e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-indigo-400 outline-none min-h-[300px] bg-white resize-none" placeholder="輸入貼圖文字，例如：&#10;1.早安&#10;2.晚安&#10;3.謝謝" />
-                                                                    <button onClick={handleFormatTextList} className="absolute bottom-2 right-2 px-3 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm" title="自動去除編號與符號"><span>🧹</span> 智慧格式化</button>
+                                                                    <textarea value={promptTextListInput} onChange={e => setPromptTextListInput(e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-indigo-400 outline-none min-h-[300px] bg-white resize-none" placeholder={t('promptGenPlaceholder')} />
+                                                                    <button onClick={handleFormatTextList} className="absolute bottom-2 right-2 px-3 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm" title="自動去除編號與符號"><span>🧹</span> {t('promptGenFormat')}</button>
                                                                 </div>
                                                             </div>
                                                             <div className="space-y-6">
                                                                 <div>
-                                                                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">生成數量 (Quantity)</label>
+                                                                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('promptGenQuantity')}</label>
                                                                     <div className="flex items-center gap-4">
                                                                         <input
                                                                             type="range"
@@ -1483,22 +1483,22 @@ export const App = () => {
                                                                         />
                                                                         <span className="text-indigo-600 font-black text-xl w-12 text-right">{promptGenQuantity}</span>
                                                                     </div>
-                                                                    <p className="text-[10px] text-slate-400 mt-1">對應網格: {STICKER_SPECS[promptGenQuantity]?.cols}x{STICKER_SPECS[promptGenQuantity]?.rows} ({STICKER_SPECS[promptGenQuantity]?.width}x{STICKER_SPECS[promptGenQuantity]?.height}px)</p>
+                                                                    <p className="text-[10px] text-slate-400 mt-1">{t('promptGenGrid')}: {STICKER_SPECS[promptGenQuantity]?.cols}x{STICKER_SPECS[promptGenQuantity]?.rows} ({STICKER_SPECS[promptGenQuantity]?.width}x{STICKER_SPECS[promptGenQuantity]?.height}px)</p>
                                                                 </div>
                                                                 <div>
-                                                                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">畫風設定</label>
+                                                                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('promptGenStyle')}</label>
                                                                     <div className="flex flex-wrap gap-2 mb-2">
                                                                         {ART_STYLES.map(style => (
                                                                             <button key={style} onClick={() => setPromptArtStyleInput(style)} className={`px-2 py-1 rounded text-[10px] font-bold border transition-all ${promptArtStyleInput === style ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300'}`}>{style.split(/[\(\（]/)[0]}</button>
                                                                         ))}
                                                                     </div>
-                                                                    <input type="text" value={promptArtStyleInput} onChange={e => setPromptArtStyleInput(e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-indigo-400 outline-none bg-white" placeholder="預設：Q版日本動漫" />
+                                                                    <input type="text" value={promptArtStyleInput} onChange={e => setPromptArtStyleInput(e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-indigo-400 outline-none bg-white" placeholder={t('promptGenStylePlaceholder')} />
                                                                 </div>
                                                                 <div className="hidden"></div>
                                                             </div>
                                                         </div>
                                                         <div className="relative group mt-6">
-                                                            <div className="absolute -top-3 left-4 px-2 bg-indigo-50 text-[10px] font-black text-indigo-500 uppercase tracking-widest z-10">AI 提示詞預覽</div>
+                                                            <div className="absolute -top-3 left-4 px-2 bg-indigo-50 text-[10px] font-black text-indigo-500 uppercase tracking-widest z-10">{t('previewLabel')}</div>
                                                             <div className="w-full h-48 p-5 bg-slate-900 font-mono text-xs rounded-2xl resize-none outline-none border border-slate-800 shadow-inner overflow-y-auto whitespace-pre-wrap leading-relaxed">
                                                                 {promptSegments.map((segment, idx) => (
                                                                     <span key={idx} className={typeof segment === 'string' ? "text-green-400" : "text-amber-400 font-bold bg-slate-800 px-1 rounded mx-0.5 border border-amber-400/30"}>
@@ -1506,7 +1506,7 @@ export const App = () => {
                                                                     </span>
                                                                 ))}
                                                             </div>
-                                                            <button onClick={() => copyToClipboard(promptTemplate)} className="absolute bottom-4 right-4 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg transition-all flex items-center gap-2 active:scale-95"><CopyIcon /> 一鍵複製提示詞</button>
+                                                            <button onClick={() => copyToClipboard(promptTemplate)} className="absolute bottom-4 right-4 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg transition-all flex items-center gap-2 active:scale-95"><CopyIcon /> {t('copyBtn')}</button>
                                                         </div>
                                                     </div>
                                                 )}
