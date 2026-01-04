@@ -10,24 +10,25 @@ const STICKER_GEN_MODEL_FLASH = 'gemini-2.5-flash-image';
 const TEXT_MODEL = 'gemini-3-flash-preview';
 const VALIDATION_MODEL = 'gemini-2.5-flash-image'; // Used for QA check
 
+import { saveApiKey, loadApiKey } from "./storageUtils";
+
 // Helper to get a fresh AI instance with the current key
 let dynamicApiKey = '';
 
 export const setApiKey = (key: string) => {
     dynamicApiKey = key;
     if (typeof window !== 'undefined') {
-        localStorage.setItem('gemini_api_key', key);
+        saveApiKey(key);
     }
 };
 
 export const getApiKey = () => {
     if (dynamicApiKey) return dynamicApiKey;
     if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('gemini_api_key');
+        const stored = loadApiKey();
         if (stored) return stored;
     }
     // Defense: Ensure we only use explicitly set keys.
-    // REMOVED: process.env.VITE_GEMINI_API_KEY fallback as per security policy.
     return '';
 };
 

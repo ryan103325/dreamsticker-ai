@@ -24,6 +24,7 @@ import {
 } from './types';
 import { translations, LanguageCode } from './i18n';
 import { generateIPCharacter, generateStickerSheet, editSticker, parseStickerIdeas, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish } from './services/geminiService';
+import { loadApiKey, clearApiKey } from './services/storageUtils';
 import { generateFrameZip, wait, resizeImage, extractDominantColors, blobToDataUrl, getFontFamily, processGreenScreenImage, generateTabImage } from './services/utils';
 import { processGreenScreenAndSlice, waitForOpenCV } from './services/opencvService';
 import { Loader } from './components/Loader';
@@ -266,7 +267,7 @@ export const App = () => {
     };
 
     useEffect(() => {
-        const stored = localStorage.getItem('gemini_api_key');
+        const stored = loadApiKey();
         if (stored) {
             setKeyAndStart(stored);
         }
@@ -852,7 +853,7 @@ export const App = () => {
                     <button
                         onClick={() => {
                             if (confirm(t.confirmChangeKey)) {
-                                localStorage.removeItem('gemini_api_key');
+                                clearApiKey();
                                 window.location.reload();
                             }
                         }}

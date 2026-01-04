@@ -1,4 +1,7 @@
+import React, { useState, useEffect } from 'react';
 import { translations, LanguageCode } from '../i18n';
+import { saveApiKey, loadApiKey } from '../services/storageUtils';
+import { MagicWandIcon } from './Icons';
 
 interface LandingPageProps {
     onStart: (key: string) => void;
@@ -11,7 +14,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, lang, setLang
     const t = translations[lang];
 
     useEffect(() => {
-        const stored = localStorage.getItem('gemini_api_key');
+        const stored = loadApiKey();
         if (stored) setKey(stored);
     }, []);
 
