@@ -838,7 +838,19 @@ export const App = () => {
                         </h1>
                     </div>
                 </div>
-                <div className="flex gap-4">
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => {
+                            if (confirm('確定要更換 API Key 嗎？這將會清除目前的連線設定。')) {
+                                localStorage.removeItem('gemini_api_key');
+                                window.location.reload();
+                            }
+                        }}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-lg text-xs font-bold transition-all flex items-center gap-1"
+                        title="更換 API Key"
+                    >
+                        <span>🔑</span> 更換 Key
+                    </button>
                     <button onClick={() => setHelpOpen(true)} className="p-2 hover:bg-indigo-50 rounded-full text-indigo-600 transition-colors">
                         <HelpIcon />
                     </button>
