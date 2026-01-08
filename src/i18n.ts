@@ -259,6 +259,18 @@ export const translations = {
         loadingDrawingChar: "正在繪製您的 IP 角色...",
         drawingSheetPrefix: "正在繪製第 ",
         drawingSheetSuffix: " 張底圖...",
+
+        // Alerts & Status
+        generatingPlan: "生成中...",
+        copyPrompt: "複製 Prompt",
+        autoFillTip: "生成結果會自動填入上方文字框，請務必點擊「分析並自動填入」按鈕。",
+        uploading: "圖片上傳中...",
+        loadError: "圖片載入失敗",
+        ideaGenError: "靈感生成失敗，請再試一次",
+        descGenError: "描述生成失敗，請檢查網路連線",
+        alertUploadAll: "請為所有角色上傳圖片！",
+        alertUpload: "請上傳圖片！",
+        alertEnterDesc: "請輸入描述！",
     },
     en: {
         // Landing Page
@@ -518,5 +530,17 @@ export const translations = {
         loadingDrawingChar: "Drawing your IP character...",
         drawingSheetPrefix: "Drawing sheet ",
         drawingSheetSuffix: "...",
+
+        // Alerts & Status
+        generatingPlan: "Generating...",
+        copyPrompt: "Copy Prompt",
+        autoFillTip: "Result will auto-fill above. Please click 'Parse & Fill'.",
+        uploading: "Uploading...",
+        loadError: "Failed to load image",
+        ideaGenError: "Generator failed, please try again",
+        descGenError: "Description failed, check connection",
+        alertUploadAll: "Please upload all images!",
+        alertUpload: "Please upload an image!",
+        alertEnterDesc: "Please enter description!",
     }
 };

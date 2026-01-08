@@ -152,7 +152,7 @@ export const PromptGeneratorModal: React.FC<PromptGeneratorModalProps> = ({
                             <textarea
                                 value={generatedResult}
                                 onChange={(e) => setGeneratedResult(e.target.value)}
-                                className="w-full h-48 p-4 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm focus:ring-2 focus:ring-indigo-200 outline-none resize-none"
+                                className="w-full h-48 p-4 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm text-slate-900 focus:ring-2 focus:ring-indigo-200 outline-none resize-none"
                             />
                         </div>
                     )}

@@ -204,127 +204,7 @@ const TextToggle = ({ enabled, onChange }: { enabled: boolean, onChange: (val: b
     </div>
 );
 
-// External Prompt Generator Component
-const ExternalPromptGenerator = ({ onApply, isProcessing, characterType }: { onApply: (text: string) => void, isProcessing: boolean, characterType: string }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const [qty, setQty] = useState(8);
-    const [category, setCategory] = useState("綜合"); // Default to Mixed
-    const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
-    const categories = ["綜合", "職場生存", "投資韭菜", "親密關係", "吃貨日常", "迷因嘴砲", "厭世躺平"];
-
-    const handleAIGenerate = async () => {
-        setIsGeneratingPlan(true);
-        try {
-            // Apply expanded definition for "Mixed" invisibly to the user
-            let finalCategory = category;
-            if (category === "綜合") {
-                finalCategory = "綜合:職場生存(15%)、投資韭菜(15%)、親密關係(15%)、吃貨日常(15%)、迷因嘴砲(20%)、厭世躺平(20%)";
-            }
-
-            // Pass characterType to service
-            const plan = await generateStickerPlan(qty, finalCategory, characterType);
-            if (plan) {
-                onApply(plan);
-                alert("文案已生成並填入！請點擊上方「分析並自動填入」來套用設定。");
-            }
-        } catch (e) {
-            alert("生成失敗，請稍後再試。");
-            console.error(e);
-        } finally {
-            setIsGeneratingPlan(false);
-        }
-    };
-
-    const generatePrompt = () => {
-        let displayCategory = category;
-        // Don't show the expanded logic in the preview if user just selected "Mixed", 
-        // OR do show it if we want them to know. User said "just don't show in dropdown".
-        // Let's show the expanded version in the prompt PREVIEW so they know what they are getting?
-        // User said: "In the dropdown, don't let the user see it".
-        // prompt preview shows what is SENT.
-        if (category === "綜合") {
-            displayCategory = "綜合:職場生存(15%)、投資韭菜(15%)、親密關係(15%)、吃貨日常(15%)、迷因嘴砲(20%)、厭世躺平(20%)";
-        }
-
-        return `# Role: 專業 LINE 貼圖創意總監與 Prompt 工程師
-
-# Context
-使用者希望產出一組 LINE 貼圖的創意企劃，包含「貼圖文字」、「中文畫面指令」與「英文畫面指令」。你需要根據指定的「數量」與「主題風格」進行發想。
-
-# Input Data
-請使用者填入以下參數：
-1. **生成數量**：${qty}
-2. **文案種類**：${displayCategory}
-3. **主角設定**：${characterType || "未指定 (請自由發揮，但需保持一致)"}
-
-# Constraints & Rules
-1. **格式嚴格限制**：必須嚴格遵守下方 Output Format 的結構，不得更改標點符號或換行方式。
-2. **禁止 Emoji**：輸出內容中嚴禁出現任何表情符號（Emoji）。
-3. **視覺一致性**：英文指令（Prompt）必須是針對 AI 繪圖工具（如 Midjourney）可理解的視覺描述，而非僅僅是文意翻譯，必須精確描述表情、肢體動作與氛圍。
-4. **角色一致性**：既然已經指定了「主角設定」，所有的英文 Prompt 必須嚴格遵循此角色設定 (例如若是 Animal，就不能寫 person)。
-5. **文字簡潔**：貼圖上的文字（Text）必須短促有力，適合手機畫面閱讀。
-
-# Output Format
-請依序條列，格式如下：
-1. 貼圖文字(中文畫面指令與表情描述)(English visual prompt describing the pose and expression matching the Chinese instruction)
-2. 貼圖文字(中文畫面指令與表情描述)(English visual prompt describing the pose and expression matching the Chinese instruction)
-...（依此類推直到達到指定數量）
-
-# Execution
-請根據 Input Data 中的參數，開始執行任務，並以文字框呈現。`;
-    };
-
-    return (
-        <div className="border-t border-indigo-100 pt-4 mt-4">
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between text-xs font-bold text-indigo-500 hover:text-indigo-700 transition-colors"
-            >
-                <span>✨ AI 文案生成助手 (AI Copywriter)</span>
-                <span>{isOpen ? '▲' : '▼'}</span>
-            </button>
-
-            {isOpen && (
-                <div className="mt-3 space-y-3 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
-                    <div className="flex gap-2 text-xs items-center">
-                        <label className="font-bold text-slate-500">數量:</label>
-                        <select value={qty} onChange={(e) => setQty(Number(e.target.value))} className="p-1 rounded border-slate-200 text-slate-700 font-bold">
-                            {[8, 16, 24, 32, 40].map(n => <option key={n} value={n}>{n}</option>)}
-                        </select>
-                        <label className="font-bold text-slate-500 ml-2">種類:</label>
-                        <select value={category} onChange={(e) => setCategory(e.target.value)} className="p-1 rounded border-slate-200 text-slate-700 font-bold flex-1">
-                            {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                    </div>
-
-                    <div className="flex gap-2">
-                        {/* AI Generate Button (Full Width now since mixed button is gone) */}
-                        <button
-                            onClick={handleAIGenerate}
-                            disabled={isProcessing || isGeneratingPlan}
-                            className="w-full py-2 text-xs bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold rounded shadow-md hover:shadow-lg disabled:opacity-50"
-                        >
-                            {isGeneratingPlan ? '生成中...' : '✨ 由 AI 生成'}
-                        </button>
-                    </div>
-
-                    <div className="relative">
-                        <textarea
-                            readOnly
-                            value={generatePrompt()}
-                            className="w-full h-24 p-2 text-[10px] bg-white border border-slate-200 rounded-lg resize-none text-slate-500 font-mono focus:outline-none"
-                        />
-                        <div className="absolute bottom-2 right-2">
-                            <CopyBtn text={generatePrompt()} label="複製 Prompt" />
-                        </div>
-                    </div>
-                    <p className="text-[10px] text-slate-400 text-center">生成結果會自動填入上方文字框，請務必點擊「分析並自動填入」按鈕。</p>
-                </div>
-            )}
-        </div>
-    );
-};
 
 import { useTheme } from './ThemeContext';
 
@@ -459,7 +339,7 @@ export const App = () => {
         const file = e.target.files?.[0];
         if (file) {
             setIsProcessing(true);
-            setLoadingMsg("圖片上傳中...");
+            setLoadingMsg(t('uploading'));
 
             const reader = new FileReader();
             reader.onload = async (event) => {
@@ -474,7 +354,7 @@ export const App = () => {
                     }
                 } catch (e) {
                     console.error(e);
-                    alert("圖片載入失敗");
+                    alert(t('loadError'));
                 } finally {
                     setIsProcessing(false);
                 }
@@ -647,9 +527,11 @@ export const App = () => {
         try {
             const prompt = await generateRandomCharacterPrompt(type, "");
             setPromptText(prompt);
+            setLoadingMsg(t('uploading')); // Line 462 equivalent logic usually
+            // ...
         } catch (e) {
             console.error(e);
-            alert("靈感生成失敗，請再試一次");
+            alert(t('ideaGenError'));
         } finally {
             setDiceLoading(false);
         }
@@ -663,7 +545,7 @@ export const App = () => {
             setPromptText(description);
         } catch (e) {
             console.error(e);
-            alert("描述生成失敗，請檢查網路連線");
+            alert(t('descGenError'));
         } finally {
             setIsGeneratingDescription(false);
         }
@@ -671,20 +553,28 @@ export const App = () => {
 
 
 
+    const handlePromptApply = (text: string) => {
+        if (promptModalTarget === 'SMART_INPUT') {
+            setSmartInputText(text);
+        } else if (promptModalTarget === 'SHEET_INPUT') {
+            setPromptTextListInput(text);
+        }
+    };
+
     const handleGenerateCharacter = async () => {
         if (!inputMode) return;
 
         // Check validation for Group Mode
         if (inputMode === 'PHOTO') {
             // PHOTO Mode: Image is required, Description is OPTIONAL (from keyword input)
-            if (charCount > 1 && groupChars.some(c => !c.image)) return alert("請為所有角色上傳圖片！");
-            if (charCount === 1 && !sourceImage) return alert("請上傳圖片！");
+            if (charCount > 1 && groupChars.some(c => !c.image)) return alert(t('alertUploadAll'));
+            if (charCount === 1 && !sourceImage) return alert(t('alertUpload'));
         } else if (!sourceImage && inputMode !== 'TEXT_PROMPT') {
             // EXISTING_IP or UPLOAD_SHEET: Image required
-            return alert("請先上傳圖片！");
+            return alert(t('alertUpload'));
         } else if (inputMode === 'TEXT_PROMPT' && !promptText) {
             // TEXT_PROMPT: Prompt required
-            return alert("請輸入描述！");
+            return alert(t('alertEnterDesc'));
         }
 
         setIsProcessing(true);
@@ -1537,7 +1427,7 @@ export const App = () => {
                                             <TextToggle enabled={includeText} onChange={setIncludeText} />
                                         </div>
 
-                                        <textarea value={smartInputText} onChange={(e) => setSmartInputText(e.target.value)} className="w-full h-40 p-4 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-400 outline-none resize-none bg-white mb-4" placeholder={t('pasteIdeasPlaceholder')} />
+                                        <textarea value={smartInputText} onChange={(e) => setSmartInputText(e.target.value)} className="w-full h-40 p-4 rounded-xl border border-slate-200 text-sm text-slate-900 focus:ring-2 focus:ring-indigo-400 outline-none resize-none bg-white mb-4" placeholder={t('pasteIdeasPlaceholder')} />
                                         <button onClick={handleSmartInput} disabled={!smartInputText.trim() || isProcessing} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"><MagicWandIcon /> {t('analyzeAndFill')}</button>
                                         <div className="mt-4 border-t border-indigo-100 pt-4">
                                             <button
