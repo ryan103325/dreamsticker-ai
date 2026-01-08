@@ -27,6 +27,7 @@ import { generateIPCharacter, generateStickerSheet, editSticker, parseStickerIde
 import { loadApiKey, clearApiKey } from './services/storageUtils';
 import { generateFrameZip, wait, resizeImage, extractDominantColors, blobToDataUrl, getFontFamily, processGreenScreenImage, generateTabImage } from './services/utils';
 import { processGreenScreenAndSlice, waitForOpenCV } from './services/opencvService';
+import { PromptGeneratorModal } from './components/PromptGeneratorModal';
 import { Loader } from './components/Loader';
 import { MagicEditor } from './components/MagicEditor';
 import { HelpModal } from './components/HelpModal';
@@ -407,6 +408,12 @@ export const App = () => {
     const [diceLoading, setDiceLoading] = useState(false);
 
 
+    const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
+    const [promptModalTarget, setPromptModalTarget] = useState<'SMART_INPUT' | 'SHEET_INPUT' | null>(null);
+
+
+
+
     // OpenCV State
     const [isOpenCVReady, setIsOpenCVReady] = useState(false);
 
@@ -661,6 +668,8 @@ export const App = () => {
             setIsGeneratingDescription(false);
         }
     };
+
+
 
     const handleGenerateCharacter = async () => {
         if (!inputMode) return;
@@ -1417,7 +1426,7 @@ export const App = () => {
                                             </div>
                                             {/* ... Prompt Generator ... */}
                                             <div className="bg-indigo-50/30 rounded-3xl border border-indigo-100 overflow-hidden transition-all duration-300">
-                                                <button onClick={() => setIsPromptGeneratorOpen(!isPromptGeneratorOpen)} className="w-full p-5 flex items-center justify-between text-left hover:bg-indigo-50 transition-colors group">
+                                                <button onClick={() => { setPromptModalTarget('SHEET_INPUT'); setIsPromptModalOpen(true); }} className="w-full p-5 flex items-center justify-between text-left hover:bg-indigo-50 transition-colors group">
                                                     <div className="flex items-center gap-3">
                                                         <div className="bg-indigo-100 text-indigo-600 p-2 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors"><span className="text-lg">✨</span></div>
                                                         <div>
@@ -1425,60 +1434,16 @@ export const App = () => {
                                                             <p className="text-xs text-indigo-400 mt-0.5">{t('promptGenSubtitle')}</p>
                                                         </div>
                                                     </div>
-                                                    <div className={`transform transition-transform duration-300 text-indigo-300 ${isPromptGeneratorOpen ? 'rotate-180' : ''}`}>
-                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                                    <div className={`transform transition-transform duration-300 text-indigo-300`}>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                                                     </div>
                                                 </button>
 
+                                                {/* Removed inline Prompt Generator, replaced with Modal trigger above */}
+
                                                 {isPromptGeneratorOpen && (
-                                                    <div className="p-6 pt-0 border-t border-indigo-50 space-y-6 animate-fade-in">
-                                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-6">
-                                                            <div>
-                                                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('promptGenContent')}</label>
-                                                                <div className="relative">
-                                                                    <textarea value={promptTextListInput} onChange={e => setPromptTextListInput(e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-indigo-400 outline-none min-h-[300px] bg-white resize-none" placeholder={t('promptGenPlaceholder')} />
-                                                                    <button onClick={handleFormatTextList} className="absolute bottom-2 right-2 px-3 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm" title="自動去除編號與符號"><span>🧹</span> {t('promptGenFormat')}</button>
-                                                                </div>
-                                                            </div>
-                                                            <div className="space-y-6">
-                                                                <div>
-                                                                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('promptGenQuantity')}</label>
-                                                                    <div className="flex items-center gap-4">
-                                                                        <input
-                                                                            type="range"
-                                                                            min="8" max="40" step="8"
-                                                                            value={promptGenQuantity}
-                                                                            onChange={(e) => setPromptGenQuantity(Number(e.target.value) as StickerQuantity)}
-                                                                            className="flex-1 accent-indigo-600 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                                                                        />
-                                                                        <span className="text-indigo-600 font-black text-xl w-12 text-right">{promptGenQuantity}</span>
-                                                                    </div>
-                                                                    <p className="text-[10px] text-slate-400 mt-1">{t('promptGenGrid')}: {STICKER_SPECS[promptGenQuantity]?.cols}x{STICKER_SPECS[promptGenQuantity]?.rows} ({STICKER_SPECS[promptGenQuantity]?.width}x{STICKER_SPECS[promptGenQuantity]?.height}px)</p>
-                                                                </div>
-                                                                <div>
-                                                                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('promptGenStyle')}</label>
-                                                                    <div className="flex flex-wrap gap-2 mb-2">
-                                                                        {ART_STYLES.map(styleKey => (
-                                                                            <button key={styleKey} onClick={() => setPromptArtStyleInput(t(styleKey))} className={`px-2 py-1 rounded text-[10px] font-bold border transition-all ${promptArtStyleInput === t(styleKey) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300'}`}>{t(styleKey).split(/[\(\（]/)[0]}</button>
-                                                                        ))}
-                                                                    </div>
-                                                                    <input type="text" value={promptArtStyleInput} onChange={e => setPromptArtStyleInput(e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-indigo-400 outline-none bg-white" placeholder={t('promptGenStylePlaceholder')} />
-                                                                </div>
-                                                                <div className="hidden"></div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="relative group mt-6">
-                                                            <div className="absolute -top-3 left-4 px-2 bg-indigo-50 text-[10px] font-black text-indigo-500 uppercase tracking-widest z-10">{t('previewLabel')}</div>
-                                                            <div className="w-full h-48 p-5 bg-slate-900 font-mono text-xs rounded-2xl resize-none outline-none border border-slate-800 shadow-inner overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                                                                {promptSegments.map((segment, idx) => (
-                                                                    <span key={idx} className={typeof segment === 'string' ? "text-green-400" : "text-amber-400 font-bold bg-slate-800 px-1 rounded mx-0.5 border border-amber-400/30"}>
-                                                                        {typeof segment === 'string' ? segment : segment.text}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                            <button onClick={() => copyToClipboard(promptTemplate)} className="absolute bottom-4 right-4 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg transition-all flex items-center gap-2 active:scale-95"><CopyIcon /> {t('copyBtn')}</button>
-                                                        </div>
-                                                    </div>
+                                                    /* Hidden or Removed - Keeping structure clean */
+                                                    <div className="hidden"></div>
                                                 )}
                                             </div>
                                         </div>
@@ -1574,7 +1539,15 @@ export const App = () => {
 
                                         <textarea value={smartInputText} onChange={(e) => setSmartInputText(e.target.value)} className="w-full h-40 p-4 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-400 outline-none resize-none bg-white mb-4" placeholder={t('pasteIdeasPlaceholder')} />
                                         <button onClick={handleSmartInput} disabled={!smartInputText.trim() || isProcessing} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"><MagicWandIcon /> {t('analyzeAndFill')}</button>
-                                        <ExternalPromptGenerator onApply={setSmartInputText} isProcessing={isProcessing} characterType={charComposition} />
+                                        <div className="mt-4 border-t border-indigo-100 pt-4">
+                                            <button
+                                                onClick={() => { setPromptModalTarget('SMART_INPUT'); setIsPromptModalOpen(true); }}
+                                                className="w-full flex items-center justify-between text-xs font-bold text-indigo-500 hover:text-indigo-700 transition-colors p-2 rounded-lg hover:bg-indigo-50"
+                                            >
+                                                <span className="flex items-center gap-2">✨ {t('promptGenTitle')} <span className="text-[10px] bg-indigo-100 px-1.5 py-0.5 rounded text-indigo-600">New</span></span>
+                                                <span>→</span>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -1761,6 +1734,13 @@ export const App = () => {
             {isProcessing && <Loader message={loadingMsg} />
             }
             <MagicEditor isOpen={magicEditorOpen} imageUrl={editorImage} onClose={() => setMagicEditorOpen(false)} onGenerate={handleMagicGenerate} isProcessing={isProcessing} isAnimated={false} />
+            <PromptGeneratorModal
+                isOpen={isPromptModalOpen}
+                onClose={() => setIsPromptModalOpen(false)}
+                onApply={handlePromptApply}
+                initialCharacter={charComposition}
+                stickerType={'STICKER'}
+            />
             <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
         </div >
     );

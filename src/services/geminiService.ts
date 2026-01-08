@@ -849,3 +849,60 @@ export const parseStructuredStickerPlan = (rawText: string): { text: string, emo
     }
     return results;
 };
+
+/**
+ * Generates sticker/emoji text content based on specific themes and character settings.
+ * Dynamically switches context between "Sticker" (貼圖) and "Emoji" (表情貼).
+ */
+export const generateStickerText = async (params: {
+    quantity: number;
+    theme: string;
+    character: string;
+    type: 'STICKER' | 'EMOJI';
+}): Promise<string> => {
+    const ai = getAI();
+    const { quantity, theme, character, type } = params;
+
+    // Dynamic Terminology
+    const term = type === 'EMOJI' ? '表情貼' : '貼圖';
+
+    // The User's specific "Creative Director" Prompt
+    const prompt = `
+# Role: 專業 LINE ${term}創意總監與 Prompt 工程師
+
+# Context
+使用者希望產出一組 LINE ${term}的創意企劃，包含「${term}文字」、「中文畫面指令」與「英文畫面指令」。你需要根據指定的「數量」與「主題風格」進行發想。
+
+# Input Data
+請使用者填入以下參數：
+1. **生成數量**：[${quantity}]
+2. **文案種類**：${theme}
+3. **主角設定**：${character}
+
+# Constraints & Rules
+1. **格式嚴格限制**：必須嚴格遵守下方 Output Format 的結構，不得更改標點符號或換行方式。
+2. **禁止 Emoji**：輸出內容中嚴禁出現任何表情符號（Emoji）。
+3. **視覺一致性**：英文指令（Prompt）必須是針對 AI 繪圖工具（如 Midjourney）可理解的視覺描述，而非僅僅是文意翻譯，必須精確描述表情、肢體動作與氛圍。
+4. **角色一致性**：既然已經指定了「主角設定」，所有的英文 Prompt 必須嚴格遵循此角色設定 (例如若是 Animal，就不能寫 person)。
+5. **文字簡潔**：${term}上的文字（Text）必須短促有力，適合手機畫面閱讀。
+
+# Output Format
+請依序條列，格式如下：
+${term}文字, 中文畫面指令, 英文畫面指令
+${term}文字, 中文畫面指令, 英文畫面指令
+...
+
+# Execution
+請根據 Input Data 中的參數，開始執行任務，並以文字框呈現。
+    `;
+
+    return callWithRetry(async () => {
+        const response = await ai.models.generateContent({
+            model: TEXT_MODEL,
+            contents: { parts: [{ text: prompt }] },
+            config: { temperature: 0.8 }
+        });
+        validateResponse(response);
+        return response.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+    });
+};
