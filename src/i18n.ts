@@ -99,7 +99,7 @@ export const translations = {
         keywordLabel: "主角特徵關鍵字 (選填)",
         keywordPlaceholder: "例如：快樂的柴犬、戴眼鏡的工程師...",
         generateIP: "✨ 由 AI 生成 IP",
-        generating: "正在生成...",
+        // generating: "正在生成...", // Removed duplicate
         regenerate: "重新生成",
         confirmUse: "確認使用此圖",
 
@@ -358,7 +358,7 @@ export const translations = {
         keywordLabel: "Character Keywords (Optional)",
         keywordPlaceholder: "e.g., Happy Shiba Inu, Engineer with glasses...",
         generateIP: "✨ Generate IP by AI",
-        generating: "Generating...",
+        // generating: "Generating...", // Removed duplicate
         regenerate: "Regenerate",
         confirmUse: "Confirm & Use",
 
