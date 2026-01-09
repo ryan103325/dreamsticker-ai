@@ -23,11 +23,10 @@ import {
     CharacterInput
 } from './types';
 import { useLanguage } from './LanguageContext';
-import { generateIPCharacter, generateStickerSheet, editSticker, parseStickerIdeas, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish, generateStickerPlan, parseStructuredStickerPlan, analyzeImageSubject, generateStickerText } from './services/geminiService';
+import { generateIPCharacter, generateStickerSheet, editSticker, parseStickerIdeas, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish, generateStickerPlan, parseStructuredStickerPlan, analyzeImageSubject, generateSimpleIcons } from './services/geminiService';
 import { loadApiKey, clearApiKey } from './services/storageUtils';
 import { generateFrameZip, wait, resizeImage, extractDominantColors, blobToDataUrl, getFontFamily, processGreenScreenImage, generateTabImage } from './services/utils';
 import { processGreenScreenAndSlice, waitForOpenCV } from './services/opencvService';
-import { PromptGeneratorModal } from './components/PromptGeneratorModal';
 import { Loader } from './components/Loader';
 import { MagicEditor } from './components/MagicEditor';
 import { HelpModal } from './components/HelpModal';
@@ -204,70 +203,75 @@ const TextToggle = ({ enabled, onChange }: { enabled: boolean, onChange: (val: b
     </div>
 );
 
-// Inline Prompt Generator Component (Restored & Upgraded)
-const InlinePromptGenerator = ({ onApply, isProcessing, initialCharacter, stickerType }: { onApply: (text: string) => void, isProcessing: boolean, initialCharacter: string, stickerType: StickerType }) => {
-    const { t } = useLanguage();
+// External Prompt Generator Component
+const ExternalPromptGenerator = ({ onApply, isProcessing, characterType }: { onApply: (text: string) => void, isProcessing: boolean, characterType: string }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [qty, setQty] = useState(8);
-    const [theme, setTheme] = useState("mixed");
-    const [customCharacter, setCustomCharacter] = useState(initialCharacter || "");
+    const [category, setCategory] = useState("綜合"); // Default to Mixed
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
 
-    useEffect(() => {
-        setCustomCharacter(initialCharacter);
-    }, [initialCharacter]);
-
-
-    const themes = [
-        { id: 'mixed', label: t('themeMixed') },
-        { id: 'work', label: t('themeWork') },
-        { id: 'invest', label: t('themeInvest') },
-        { id: 'love', label: t('themeLove') },
-        { id: 'foodie', label: t('themeFoodie') },
-        { id: 'meme', label: t('themeMeme') },
-        { id: 'lazy', label: t('themeLazy') },
-    ];
+    const categories = ["綜合", "職場生存", "投資韭菜", "親密關係", "吃貨日常", "迷因嘴砲", "厭世躺平"];
 
     const handleAIGenerate = async () => {
         setIsGeneratingPlan(true);
         try {
-            const themeLabel = themes.find(th => th.id === theme)?.label || theme;
-            const result = await generateStickerText({
-                quantity: qty,
-                theme: themeLabel,
-                character: customCharacter,
-                type: stickerType === 'EMOJI' ? 'EMOJI' : 'STICKER'
-            });
-            if (result) {
-                onApply(result);
+            // Apply expanded definition for "Mixed" invisibly to the user
+            let finalCategory = category;
+            if (category === "綜合") {
+                finalCategory = "綜合:職場生存(15%)、投資韭菜(15%)、親密關係(15%)、吃貨日常(15%)、迷因嘴砲(20%)、厭世躺平(20%)";
+            }
+
+            // Pass characterType to service
+            const plan = await generateStickerPlan(qty, finalCategory, characterType);
+            if (plan) {
+                onApply(plan);
+                alert("文案已生成並填入！請點擊上方「分析並自動填入」來套用設定。");
             }
         } catch (e) {
-            alert(t('ideaGenError'));
+            alert("生成失敗，請稍後再試。");
             console.error(e);
         } finally {
             setIsGeneratingPlan(false);
         }
     };
 
-    const generatePreviewPrompt = () => {
-        const term = stickerType === 'EMOJI' ? '表情貼' : '貼圖';
-        const themeLabel = themes.find(th => th.id === theme)?.label || theme;
+    const generatePrompt = () => {
+        let displayCategory = category;
+        // Don't show the expanded logic in the preview if user just selected "Mixed", 
+        // OR do show it if we want them to know. User said "just don't show in dropdown".
+        // Let's show the expanded version in the prompt PREVIEW so they know what they are getting?
+        // User said: "In the dropdown, don't let the user see it".
+        // prompt preview shows what is SENT.
+        if (category === "綜合") {
+            displayCategory = "綜合:職場生存(15%)、投資韭菜(15%)、親密關係(15%)、吃貨日常(15%)、迷因嘴砲(20%)、厭世躺平(20%)";
+        }
 
-        return `# Role: 專業 LINE ${term}創意總監與 Prompt 工程師
+        return `# Role: 專業 LINE 貼圖創意總監與 Prompt 工程師
 
 # Context
-使用者希望產出一組 LINE ${term}的創意企劃，包含「${term}文字」、「中文畫面指令」與「英文畫面指令」。你需要根據指定的「數量」與「主題風格」進行發想。
+使用者希望產出一組 LINE 貼圖的創意企劃，包含「貼圖文字」、「中文畫面指令」與「英文畫面指令」。你需要根據指定的「數量」與「主題風格」進行發想。
 
 # Input Data
+請使用者填入以下參數：
 1. **生成數量**：${qty}
-2. **文案種類**：${themeLabel}
-3. **主角設定**：${customCharacter || "未指定"}
+2. **文案種類**：${displayCategory}
+3. **主角設定**：${characterType || "未指定 (請自由發揮，但需保持一致)"}
+
+# Constraints & Rules
+1. **格式嚴格限制**：必須嚴格遵守下方 Output Format 的結構，不得更改標點符號或換行方式。
+2. **禁止 Emoji**：輸出內容中嚴禁出現任何表情符號（Emoji）。
+3. **視覺一致性**：英文指令（Prompt）必須是針對 AI 繪圖工具（如 Midjourney）可理解的視覺描述，而非僅僅是文意翻譯，必須精確描述表情、肢體動作與氛圍。
+4. **角色一致性**：既然已經指定了「主角設定」，所有的英文 Prompt 必須嚴格遵循此角色設定 (例如若是 Animal，就不能寫 person)。
+5. **文字簡潔**：貼圖上的文字（Text）必須短促有力，適合手機畫面閱讀。
 
 # Output Format
 請依序條列，格式如下：
-${term}文字, 中文畫面指令, 英文畫面指令
-... (x${qty})
-`;
+1. 貼圖文字(中文畫面指令與表情描述)(English visual prompt describing the pose and expression matching the Chinese instruction)
+2. 貼圖文字(中文畫面指令與表情描述)(English visual prompt describing the pose and expression matching the Chinese instruction)
+...（依此類推直到達到指定數量）
+
+# Execution
+請根據 Input Data 中的參數，開始執行任務，並以文字框呈現。`;
     };
 
     return (
@@ -276,65 +280,125 @@ ${term}文字, 中文畫面指令, 英文畫面指令
                 onClick={() => setIsOpen(!isOpen)}
                 className="w-full flex items-center justify-between text-xs font-bold text-indigo-500 hover:text-indigo-700 transition-colors"
             >
-                <span>✨ {t('promptGenTitle')}</span>
+                <span>✨ AI 文案生成助手 (AI Copywriter)</span>
                 <span>{isOpen ? '▲' : '▼'}</span>
             </button>
 
             {isOpen && (
-                <div className="mt-3 space-y-3 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100 animate-fade-in">
-
-                    {/* Controls */}
-                    <div className="space-y-2">
-                        <div className="flex gap-2">
-                            <div className="flex-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">{t('genTheme')}</label>
-                                <select value={theme} onChange={(e) => setTheme(e.target.value)} className="w-full p-1.5 rounded-lg border-slate-200 text-sm font-bold text-slate-700">
-                                    {themes.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-                                </select>
-                            </div>
-                            <div className="w-20">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">{t('genQuantity')}</label>
-                                <select value={qty} onChange={(e) => setQty(Number(e.target.value))} className="w-full p-1.5 rounded-lg border-slate-200 text-sm font-bold text-slate-700">
-                                    {[8, 16, 24, 32, 40].map(n => <option key={n} value={n}>{n}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                        <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase">{t('genCharacter')}</label>
-                            <input type="text" value={customCharacter} onChange={(e) => setCustomCharacter(e.target.value)} className="w-full p-1.5 rounded-lg border-slate-200 text-sm font-bold text-slate-700" placeholder={t('genCharacterPlaceholder')} />
-                        </div>
+                <div className="mt-3 space-y-3 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
+                    <div className="flex gap-2 text-xs items-center">
+                        <label className="font-bold text-slate-500">數量:</label>
+                        <select value={qty} onChange={(e) => setQty(Number(e.target.value))} className="p-1 rounded border-slate-200 text-slate-700 font-bold">
+                            {[8, 16, 24, 32, 40].map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                        <label className="font-bold text-slate-500 ml-2">種類:</label>
+                        <select value={category} onChange={(e) => setCategory(e.target.value)} className="p-1 rounded border-slate-200 text-slate-700 font-bold flex-1">
+                            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
                     </div>
 
-                    {/* Generate Button */}
-                    <button
-                        onClick={handleAIGenerate}
-                        disabled={isProcessing || isGeneratingPlan}
-                        className="w-full py-2 text-xs bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold rounded-lg shadow-md hover:shadow-lg disabled:opacity-50 flex items-center justify-center gap-1"
-                    >
-                        {isGeneratingPlan ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <MagicWandIcon />}
-                        {isGeneratingPlan ? t('generatingPlan') : t('startGenerate')}
-                    </button>
+                    <div className="flex gap-2">
+                        {/* ... (Previous code) */}
+                        <button
+                            onClick={handleAIGenerate}
+                            disabled={isProcessing || isGeneratingPlan}
+                            className="w-full py-2 text-xs bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold rounded shadow-md hover:shadow-lg disabled:opacity-50"
+                        >
+                            {isGeneratingPlan ? '生成中...' : '✨ 由 AI 生成'}
+                        </button>
+                    </div>
 
-                    {/* Preview Prompt */}
-                    <div className="relative pt-2 border-t border-indigo-100/50">
-                        <label className="text-[10px] font-bold text-slate-400 mb-1 block">Prompt Preview (Copyable)</label>
+                    <div className="relative">
                         <textarea
                             readOnly
-                            value={generatePreviewPrompt()}
+                            value={generatePrompt()}
                             className="w-full h-24 p-2 text-[10px] bg-white border border-slate-200 rounded-lg resize-none text-slate-500 font-mono focus:outline-none"
                         />
                         <div className="absolute bottom-2 right-2">
-                            <CopyBtn text={generatePreviewPrompt()} label={t('copyPrompt')} />
+                            <CopyBtn text={generatePrompt()} label="複製 Prompt" />
                         </div>
                     </div>
-                    <p className="text-[10px] text-slate-400 text-center">{t('autoFillTip')}</p>
+                    <p className="text-[10px] text-slate-400 text-center">生成結果會自動填入上方文字框，請務必點擊「分析並自動填入」按鈕。</p>
                 </div>
             )}
         </div>
     );
 };
 
+const SimpleIconGenerator = ({ onApply }: { onApply: (text: string) => void }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [qty, setQty] = useState(8);
+    const [topic, setTopic] = useState("");
+    const [isGenerating, setIsGenerating] = useState(false);
 
+    const handleGenerate = async () => {
+        if (!topic.trim()) return alert("請輸入主題 (Topic)");
+        setIsGenerating(true);
+        try {
+            const list = await generateSimpleIcons(qty, topic);
+            if (list) {
+                onApply(list);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("文案生成失敗");
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    return (
+        <div className="mb-4 bg-indigo-50/50 rounded-xl border border-indigo-100/50 overflow-hidden">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full p-3 flex items-center justify-between text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors hover:bg-indigo-50"
+            >
+                <div className="flex items-center gap-2">
+                    <span>💡</span>
+                    <span>AI 靈感生成助手 (Idea Generator)</span>
+                </div>
+                <span>{isOpen ? '▲' : '▼'}</span>
+            </button>
+
+            {isOpen && (
+                <div className="p-3 border-t border-indigo-100/50 space-y-3 animate-fade-in">
+                    <div className="flex gap-2 text-xs items-center">
+                        <label className="font-bold text-slate-500 whitespace-nowrap">數量:</label>
+                        <select
+                            value={qty}
+                            onChange={(e) => setQty(Number(e.target.value))}
+                            className="p-2 rounded-lg border-slate-200 text-slate-700 font-bold bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                        >
+                            {[8, 16, 24, 32, 40].map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                        <input
+                            type="text"
+                            value={topic}
+                            onChange={(e) => setTopic(e.target.value)}
+                            placeholder="輸入主題 (例如: 上班族、貓咪、新年...)"
+                            className="flex-1 p-2 rounded-lg border border-slate-200 text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                        />
+                    </div>
+                    <button
+                        onClick={handleGenerate}
+                        disabled={isGenerating || !topic.trim()}
+                        className="w-full py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs font-bold rounded-lg shadow-md hover:shadow-lg disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                    >
+                        {isGenerating ? (
+                            <>
+                                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                <span>生成中...</span>
+                            </>
+                        ) : (
+                            <><span>✨</span> 立即生成並填入</>
+                        )}
+                    </button>
+                    <p className="text-[10px] text-slate-400 text-center">AI 將自動產生 {qty} 個相關的情緒/關鍵字，並填入下方欄位。</p>
+                </div>
+            )}
+        </div>
+    );
+};
 
 import { useTheme } from './ThemeContext';
 
@@ -418,12 +482,6 @@ export const App = () => {
     const [diceLoading, setDiceLoading] = useState(false);
 
 
-    const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
-    const [promptModalTarget, setPromptModalTarget] = useState<'SMART_INPUT' | 'SHEET_INPUT' | null>(null);
-
-
-
-
     // OpenCV State
     const [isOpenCVReady, setIsOpenCVReady] = useState(false);
 
@@ -469,7 +527,7 @@ export const App = () => {
         const file = e.target.files?.[0];
         if (file) {
             setIsProcessing(true);
-            setLoadingMsg(t('uploading'));
+            setLoadingMsg("圖片上傳中...");
 
             const reader = new FileReader();
             reader.onload = async (event) => {
@@ -484,7 +542,7 @@ export const App = () => {
                     }
                 } catch (e) {
                     console.error(e);
-                    alert(t('loadError'));
+                    alert("圖片載入失敗");
                 } finally {
                     setIsProcessing(false);
                 }
@@ -657,11 +715,9 @@ export const App = () => {
         try {
             const prompt = await generateRandomCharacterPrompt(type, "");
             setPromptText(prompt);
-            setLoadingMsg(t('uploading')); // Line 462 equivalent logic usually
-            // ...
         } catch (e) {
             console.error(e);
-            alert(t('ideaGenError'));
+            alert("靈感生成失敗，請再試一次");
         } finally {
             setDiceLoading(false);
         }
@@ -675,19 +731,9 @@ export const App = () => {
             setPromptText(description);
         } catch (e) {
             console.error(e);
-            alert(t('descGenError'));
+            alert("描述生成失敗，請檢查網路連線");
         } finally {
             setIsGeneratingDescription(false);
-        }
-    };
-
-
-
-    const handlePromptApply = (text: string) => {
-        if (promptModalTarget === 'SMART_INPUT') {
-            setSmartInputText(text);
-        } else if (promptModalTarget === 'SHEET_INPUT') {
-            setPromptTextListInput(text);
         }
     };
 
@@ -697,14 +743,14 @@ export const App = () => {
         // Check validation for Group Mode
         if (inputMode === 'PHOTO') {
             // PHOTO Mode: Image is required, Description is OPTIONAL (from keyword input)
-            if (charCount > 1 && groupChars.some(c => !c.image)) return alert(t('alertUploadAll'));
-            if (charCount === 1 && !sourceImage) return alert(t('alertUpload'));
+            if (charCount > 1 && groupChars.some(c => !c.image)) return alert("請為所有角色上傳圖片！");
+            if (charCount === 1 && !sourceImage) return alert("請上傳圖片！");
         } else if (!sourceImage && inputMode !== 'TEXT_PROMPT') {
             // EXISTING_IP or UPLOAD_SHEET: Image required
-            return alert(t('alertUpload'));
+            return alert("請先上傳圖片！");
         } else if (inputMode === 'TEXT_PROMPT' && !promptText) {
             // TEXT_PROMPT: Prompt required
-            return alert(t('alertEnterDesc'));
+            return alert("請輸入描述！");
         }
 
         setIsProcessing(true);
@@ -1446,7 +1492,7 @@ export const App = () => {
                                             </div>
                                             {/* ... Prompt Generator ... */}
                                             <div className="bg-indigo-50/30 rounded-3xl border border-indigo-100 overflow-hidden transition-all duration-300">
-                                                <button onClick={() => { setPromptModalTarget('SHEET_INPUT'); setIsPromptModalOpen(true); }} className="w-full p-5 flex items-center justify-between text-left hover:bg-indigo-50 transition-colors group">
+                                                <button onClick={() => setIsPromptGeneratorOpen(!isPromptGeneratorOpen)} className="w-full p-5 flex items-center justify-between text-left hover:bg-indigo-50 transition-colors group">
                                                     <div className="flex items-center gap-3">
                                                         <div className="bg-indigo-100 text-indigo-600 p-2 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors"><span className="text-lg">✨</span></div>
                                                         <div>
@@ -1454,16 +1500,64 @@ export const App = () => {
                                                             <p className="text-xs text-indigo-400 mt-0.5">{t('promptGenSubtitle')}</p>
                                                         </div>
                                                     </div>
-                                                    <div className={`transform transition-transform duration-300 text-indigo-300`}>
-                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                                    <div className={`transform transition-transform duration-300 text-indigo-300 ${isPromptGeneratorOpen ? 'rotate-180' : ''}`}>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                                                     </div>
                                                 </button>
 
-                                                {/* Removed inline Prompt Generator, replaced with Modal trigger above */}
-
                                                 {isPromptGeneratorOpen && (
-                                                    /* Hidden or Removed - Keeping structure clean */
-                                                    <div className="hidden"></div>
+                                                    <div className="p-6 pt-0 border-t border-indigo-50 space-y-6 animate-fade-in">
+                                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-6">
+                                                            <div>
+                                                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('promptGenContent')}</label>
+
+                                                                {/* New AI Helper */}
+                                                                <SimpleIconGenerator onApply={(text) => setPromptTextListInput(text)} />
+
+                                                                <div className="relative">
+                                                                    <textarea value={promptTextListInput} onChange={e => setPromptTextListInput(e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-indigo-400 outline-none min-h-[300px] bg-white resize-none" placeholder={t('promptGenPlaceholder')} />
+                                                                    <button onClick={handleFormatTextList} className="absolute bottom-2 right-2 px-3 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm" title="自動去除編號與符號"><span>🧹</span> {t('promptGenFormat')}</button>
+                                                                </div>
+                                                            </div>
+                                                            <div className="space-y-6">
+                                                                <div>
+                                                                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('promptGenQuantity')}</label>
+                                                                    <div className="flex items-center gap-4">
+                                                                        <input
+                                                                            type="range"
+                                                                            min="8" max="40" step="8"
+                                                                            value={promptGenQuantity}
+                                                                            onChange={(e) => setPromptGenQuantity(Number(e.target.value) as StickerQuantity)}
+                                                                            className="flex-1 accent-indigo-600 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                                                                        />
+                                                                        <span className="text-indigo-600 font-black text-xl w-12 text-right">{promptGenQuantity}</span>
+                                                                    </div>
+                                                                    <p className="text-[10px] text-slate-400 mt-1">{t('promptGenGrid')}: {STICKER_SPECS[promptGenQuantity]?.cols}x{STICKER_SPECS[promptGenQuantity]?.rows} ({STICKER_SPECS[promptGenQuantity]?.width}x{STICKER_SPECS[promptGenQuantity]?.height}px)</p>
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('promptGenStyle')}</label>
+                                                                    <div className="flex flex-wrap gap-2 mb-2">
+                                                                        {ART_STYLES.map(styleKey => (
+                                                                            <button key={styleKey} onClick={() => setPromptArtStyleInput(t(styleKey))} className={`px-2 py-1 rounded text-[10px] font-bold border transition-all ${promptArtStyleInput === t(styleKey) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300'}`}>{t(styleKey).split(/[\(\（]/)[0]}</button>
+                                                                        ))}
+                                                                    </div>
+                                                                    <input type="text" value={promptArtStyleInput} onChange={e => setPromptArtStyleInput(e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-indigo-400 outline-none bg-white" placeholder={t('promptGenStylePlaceholder')} />
+                                                                </div>
+                                                                <div className="hidden"></div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="relative group mt-6">
+                                                            <div className="absolute -top-3 left-4 px-2 bg-indigo-50 text-[10px] font-black text-indigo-500 uppercase tracking-widest z-10">{t('previewLabel')}</div>
+                                                            <div className="w-full h-48 p-5 bg-slate-900 font-mono text-xs rounded-2xl resize-none outline-none border border-slate-800 shadow-inner overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                                                                {promptSegments.map((segment, idx) => (
+                                                                    <span key={idx} className={typeof segment === 'string' ? "text-green-400" : "text-amber-400 font-bold bg-slate-800 px-1 rounded mx-0.5 border border-amber-400/30"}>
+                                                                        {typeof segment === 'string' ? segment : segment.text}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                            <button onClick={() => copyToClipboard(promptTemplate)} className="absolute bottom-4 right-4 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg transition-all flex items-center gap-2 active:scale-95"><CopyIcon /> {t('copyBtn')}</button>
+                                                        </div>
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>
@@ -1557,16 +1651,9 @@ export const App = () => {
                                             <TextToggle enabled={includeText} onChange={setIncludeText} />
                                         </div>
 
-                                        <textarea value={smartInputText} onChange={(e) => setSmartInputText(e.target.value)} className="w-full h-40 p-4 rounded-xl border border-slate-200 text-sm text-slate-900 focus:ring-2 focus:ring-indigo-400 outline-none resize-none bg-white mb-4" placeholder={t('pasteIdeasPlaceholder')} />
+                                        <textarea value={smartInputText} onChange={(e) => setSmartInputText(e.target.value)} className="w-full h-40 p-4 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-400 outline-none resize-none bg-white mb-4" placeholder={t('pasteIdeasPlaceholder')} />
                                         <button onClick={handleSmartInput} disabled={!smartInputText.trim() || isProcessing} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"><MagicWandIcon /> {t('analyzeAndFill')}</button>
-
-                                        {/* Inline Prompt Generator (Restored & Upgraded) */}
-                                        <InlinePromptGenerator
-                                            onApply={(text) => setSmartInputText(text)}
-                                            isProcessing={isProcessing}
-                                            initialCharacter={charComposition}
-                                            stickerType={stickerType}
-                                        />
+                                        <ExternalPromptGenerator onApply={setSmartInputText} isProcessing={isProcessing} characterType={charComposition} />
                                     </div>
                                 </div>
 
@@ -1753,13 +1840,6 @@ export const App = () => {
             {isProcessing && <Loader message={loadingMsg} />
             }
             <MagicEditor isOpen={magicEditorOpen} imageUrl={editorImage} onClose={() => setMagicEditorOpen(false)} onGenerate={handleMagicGenerate} isProcessing={isProcessing} isAnimated={false} />
-            <PromptGeneratorModal
-                isOpen={isPromptModalOpen}
-                onClose={() => setIsPromptModalOpen(false)}
-                onApply={handlePromptApply}
-                initialCharacter={charComposition}
-                stickerType={'STICKER'}
-            />
             <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
         </div >
     );

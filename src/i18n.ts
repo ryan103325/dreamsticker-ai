@@ -29,27 +29,6 @@ export const translations = {
         aiStudioLink: "前往 Google AI Studio",
         cloudConsoleLink: "前往 Google Cloud Console",
 
-        // Prompt Generator
-        promptGenTitle: "AI 創意文案生成",
-        promptGenSubtitle: "讓 AI 幫您發想有趣的貼圖文案與畫面指令",
-        typeSticker: "貼圖",
-        typeEmoji: "表情貼",
-        genQuantity: "生成數量",
-        genTheme: "文案風格",
-        themeMixed: "綜合 (推薦)",
-        themeWork: "職場生存",
-        themeInvest: "投資韭菜",
-        themeLove: "親密關係",
-        themeFoodie: "吃貨日常",
-        themeMeme: "迷因嘴砲",
-        themeLazy: "厭世躺平",
-        genCharacter: "主角設定",
-        genCharacterPlaceholder: "例如：一隻穿著西裝的橘貓、一位厭世的上班族少女...",
-        startGenerate: "開始生成創意",
-        generating: "正在發想中...",
-        genResult: "生成結果 (可編輯)",
-        applyToEditor: "填入編輯區",
-
         // Navbar
         changeKey: "更換 Key",
         confirmChangeKey: "確定要更換 API Key 嗎？這將會清除目前的連線設定。",
@@ -99,7 +78,7 @@ export const translations = {
         keywordLabel: "主角特徵關鍵字 (選填)",
         keywordPlaceholder: "例如：快樂的柴犬、戴眼鏡的工程師...",
         generateIP: "✨ 由 AI 生成 IP",
-        // generating: "正在生成...", // Removed duplicate
+        generating: "正在生成...",
         regenerate: "重新生成",
         confirmUse: "確認使用此圖",
 
@@ -170,7 +149,18 @@ export const translations = {
         previewLabel: "AI 提示詞預覽",
         copyBtn: "一鍵複製提示詞",
 
-
+        // Prompt Generator
+        promptGenTitle: "還沒有底圖？ AI 輔助生成提示詞",
+        promptGenSubtitle: "為外部工具產生的 Prompt Generator",
+        promptGenContent: "文字內容",
+        promptGenPlaceholder: "輸入貼圖文字，例如：\n1.早安\n2.晚安\n3.謝謝",
+        promptGenFormat: "智慧格式化",
+        promptGenQuantity: "生成數量",
+        promptGenGrid: "對應網格",
+        promptGenStyle: "畫風設定",
+        promptGenStylePlaceholder: "預設：Q版日本動漫",
+        promptGenPreview: "AI 提示詞預覽",
+        promptGenCopy: "一鍵複製提示詞",
 
         // Art Styles
         artStyle_chibi: "Q版萌系插畫(畫風設定：可愛、活潑、2D平面)",
@@ -259,18 +249,6 @@ export const translations = {
         loadingDrawingChar: "正在繪製您的 IP 角色...",
         drawingSheetPrefix: "正在繪製第 ",
         drawingSheetSuffix: " 張底圖...",
-
-        // Alerts & Status
-        generatingPlan: "生成中...",
-        copyPrompt: "複製 Prompt",
-        autoFillTip: "生成結果會自動填入上方文字框，請務必點擊「分析並自動填入」按鈕。",
-        uploading: "圖片上傳中...",
-        loadError: "圖片載入失敗",
-        ideaGenError: "靈感生成失敗，請再試一次",
-        descGenError: "描述生成失敗，請檢查網路連線",
-        alertUploadAll: "請為所有角色上傳圖片！",
-        alertUpload: "請上傳圖片！",
-        alertEnterDesc: "請輸入描述！",
     },
     en: {
         // Landing Page
@@ -299,27 +277,6 @@ export const translations = {
         guideTitle: "Steps:",
         aiStudioLink: "Go to Google AI Studio",
         cloudConsoleLink: "Go to Google Cloud Console",
-
-        // Prompt Generator
-        promptGenTitle: "AI Prompt Generator",
-        promptGenSubtitle: "Generate creative text and visual prompts with AI",
-        typeSticker: "Sticker",
-        typeEmoji: "Emoji",
-        genQuantity: "Quantity",
-        genTheme: "Style / Theme",
-        themeMixed: "Mixed (Recommended)",
-        themeWork: "Work Life",
-        themeInvest: "Investment",
-        themeLove: "Relationship",
-        themeFoodie: "Foodie",
-        themeMeme: "Memes",
-        themeLazy: "Lazy Life",
-        genCharacter: "Character Setting",
-        genCharacterPlaceholder: "E.g. An orange cat in a suit, a tired office lady...",
-        startGenerate: "Generate",
-        generating: "Thinking...",
-        genResult: "Result (Editable)",
-        applyToEditor: "Apply to Editor",
 
         // Navbar
         changeKey: "Change Key",
@@ -370,7 +327,7 @@ export const translations = {
         keywordLabel: "Character Keywords (Optional)",
         keywordPlaceholder: "e.g., Happy Shiba Inu, Engineer with glasses...",
         generateIP: "✨ Generate IP by AI",
-        // generating: "Generating...", // Removed duplicate
+        generating: "Generating...",
         regenerate: "Regenerate",
         confirmUse: "Confirm & Use",
 
@@ -441,7 +398,18 @@ export const translations = {
         previewLabel: "AI Prompt Preview",
         copyBtn: "Copy Prompt",
 
-
+        // Prompt Generator
+        promptGenTitle: "No base image? AI Prompt Generator",
+        promptGenSubtitle: "Prompt Generator for external tools",
+        promptGenContent: "Sticker Text",
+        promptGenPlaceholder: "Enter text, e.g.:\n1. Hi\n2. Bye\n3. Thanks",
+        promptGenFormat: "Smart Format",
+        promptGenQuantity: "Quantity",
+        promptGenGrid: "Grid Layout",
+        promptGenStyle: "Art Style",
+        promptGenStylePlaceholder: "Default: Chibi Anime",
+        promptGenPreview: "Prompt Preview",
+        promptGenCopy: "Copy Prompt",
 
         // Art Styles
         artStyle_chibi: "Chibi (Style: Cute, Lively, 2D)",
@@ -530,17 +498,5 @@ export const translations = {
         loadingDrawingChar: "Drawing your IP character...",
         drawingSheetPrefix: "Drawing sheet ",
         drawingSheetSuffix: "...",
-
-        // Alerts & Status
-        generatingPlan: "Generating...",
-        copyPrompt: "Copy Prompt",
-        autoFillTip: "Result will auto-fill above. Please click 'Parse & Fill'.",
-        uploading: "Uploading...",
-        loadError: "Failed to load image",
-        ideaGenError: "Generator failed, please try again",
-        descGenError: "Description failed, check connection",
-        alertUploadAll: "Please upload all images!",
-        alertUpload: "Please upload an image!",
-        alertEnterDesc: "Please enter description!",
     }
 };
