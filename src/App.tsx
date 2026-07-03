@@ -22,8 +22,10 @@ import {
     CharacterInput
 } from './types';
 import { useLanguage } from './LanguageContext';
-import { generateIPCharacter, generateStickerSheet, editSticker, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish, generateStickerPlan, parseStructuredStickerPlan, analyzeImageSubject, generateSimpleIcons, getQualityMode, setQualityMode, QualityMode } from './services/geminiService';
-import { generateFrameZip, resizeImage, extractDominantColors, processGreenScreenImage, generateTabImage } from './services/utils';
+import { generateIPCharacter, generateStickerSheet, editSticker, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish, generateStickerPlan, parseStructuredStickerPlan, analyzeImageSubject, generateSimpleIcons, getQualityMode, setQualityMode, QualityMode, getImageEngine, setImageEngine, ImageEngine } from './services/geminiService';
+import { setOpenAIApiKey, hasOpenAIKey } from './services/openaiImageService';
+import { generateFrameZip, resizeImage, extractDominantColors, processGreenScreenImage, generateTabImage, fitImageToCanvas } from './services/utils';
+import { generateSingleSticker } from './services/geminiService';
 import { processGreenScreenAndSlice, waitForOpenCV } from './services/opencvService';
 import { Loader } from './components/Loader';
 import { MagicEditor } from './components/MagicEditor';
@@ -436,6 +438,24 @@ export const App = () => {
         setQualityMode(mode);
     };
 
+    // Image Engine (Google Gemini vs OpenAI GPT Image; OpenAI needs its own key)
+    const [openaiAvailable, setOpenaiAvailable] = useState<boolean>(hasOpenAIKey());
+    const [imageEngine, setImageEngineState] = useState<ImageEngine>(getImageEngine());
+    const handleEngineChange = (engine: ImageEngine) => {
+        setImageEngineState(engine);
+        setImageEngine(engine);
+    };
+
+    // Generation strategy: one big grid sheet (cheapest) vs per-sticker
+    // generation (no slicing failure mode, per-sticker retry, costs more).
+    const [genMode, setGenModeState] = useState<'SHEET' | 'INDIVIDUAL'>(() => {
+        try { return localStorage.getItem('gen_mode') === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'SHEET'; } catch { return 'SHEET'; }
+    });
+    const handleGenModeChange = (mode: 'SHEET' | 'INDIVIDUAL') => {
+        setGenModeState(mode);
+        try { localStorage.setItem('gen_mode', mode); } catch { /* ignore */ }
+    };
+
     const [fontConfig, setFontConfig] = useState<FontConfig>({
         language: LANGUAGES[0],
         style: FONT_STYLES[1],
@@ -483,8 +503,15 @@ export const App = () => {
     const [hasKey, setHasKey] = useState(false);
     const [googleProfile, setGoogleProfile] = useState<GoogleProfile | null>(() => loadGoogleProfile());
 
-    const setKeyAndStart = (key: string) => {
+    const setKeyAndStart = (key: string, openaiKey?: string) => {
         setApiKey(key);
+        if (openaiKey) {
+            setOpenAIApiKey(openaiKey);
+            setOpenaiAvailable(true);
+        } else {
+            setOpenaiAvailable(hasOpenAIKey());
+            if (!hasOpenAIKey()) handleEngineChange('GEMINI');
+        }
         setGoogleProfile(loadGoogleProfile());
         setHasKey(true);
     };
@@ -517,7 +544,8 @@ export const App = () => {
                 setAppStep(AppStep.STICKER_CONFIG);
             }
         } else if (appStep === AppStep.STICKER_PROCESSING) {
-            setAppStep(AppStep.SHEET_EDITOR);
+            // Individual mode has no sheet to return to
+            setAppStep(rawSheetUrls.length > 0 ? AppStep.SHEET_EDITOR : AppStep.STICKER_CONFIG);
             setFinalStickers([]);
             setStickerPackageInfo(null);
         }
@@ -833,12 +861,65 @@ export const App = () => {
         }
     };
 
+    // Generates ONE sticker end-to-end (AI image -> green removal -> LINE-size
+    // canvas). Used by Individual mode and the per-sticker retry button.
+    const generateOneSticker = async (config: StickerConfig) => {
+        if (!generatedChar) return;
+        setFinalStickers(prev => prev.map(s => s.id === config.id ? { ...s, status: 'GENERATING' } : s));
+        try {
+            const effectiveConfig = { ...config, showText: config.showText && includeText };
+            const raw = await generateSingleSticker(generatedChar.url, effectiveConfig, stylePrompt, stickerType);
+            const clean = await processGreenScreenImage(raw);
+            const fitted = stickerType === 'EMOJI'
+                ? await fitImageToCanvas(clean, 180, 180, 'COVER', 0)
+                : await fitImageToCanvas(clean, 370, 320, 'CONTAIN', 2);
+            setFinalStickers(prev => prev.map(s => s.id === config.id ? { ...s, url: fitted, status: 'SUCCESS' } : s));
+        } catch (e) {
+            console.error(`[Individual] Sticker ${config.id} failed`, e);
+            setFinalStickers(prev => prev.map(s => s.id === config.id ? { ...s, status: 'ERROR' } : s));
+        }
+    };
+
+    const handleGenerateIndividual = async () => {
+        if (!generatedChar) return;
+        const initial: GeneratedImage[] = stickerConfigs.map(c => ({
+            id: c.id,
+            url: '',
+            type: stickerType,
+            status: 'PENDING',
+            emotion: c.text || c.emotionPromptCN || `#${c.id}`
+        }));
+        setFinalStickers(initial);
+        setMainStickerId(initial[0]?.id ?? null);
+        setStickerPackageInfo(null);
+        setRawSheetUrls([]);
+        setAppStep(AppStep.STICKER_PROCESSING);
+
+        // Small worker pool: 2 concurrent requests balances speed vs rate limits.
+        const queue = [...stickerConfigs];
+        const workers = Array.from({ length: 2 }, async () => {
+            for (let cfg = queue.shift(); cfg; cfg = queue.shift()) {
+                await generateOneSticker(cfg);
+            }
+        });
+        await Promise.all(workers);
+    };
+
+    const handleRetrySticker = (stickerId: string) => {
+        const cfg = stickerConfigs.find(c => c.id === stickerId);
+        if (cfg && generatedChar) generateOneSticker(cfg);
+    };
+
     const handleGenerateStickers = async () => {
         if (inputMode === 'UPLOAD_SHEET') {
             setAppStep(SHEET_EDITOR_STEP);
             return;
         }
         if (!generatedChar) return;
+        if (genMode === 'INDIVIDUAL') {
+            await handleGenerateIndividual();
+            return;
+        }
         setIsProcessing(true);
         setLoadingMsg(t('generating'));
 
@@ -1093,10 +1174,13 @@ export const App = () => {
     }, [promptSegments]);
 
     useEffect(() => {
-        if (appStep === AppStep.STICKER_PROCESSING && finalStickers.length > 0 && !stickerPackageInfo) {
+        if (appStep === AppStep.STICKER_PROCESSING && !stickerPackageInfo) {
+            // Wait until at least one sticker finished (Individual mode streams results in)
+            const mainSticker = finalStickers.find(s => s.id === mainStickerId && s.status === 'SUCCESS')
+                || finalStickers.find(s => s.status === 'SUCCESS');
+            if (!mainSticker) return;
             const generateInfo = async () => {
                 try {
-                    const mainSticker = finalStickers.find(s => s.id === mainStickerId) || finalStickers[0];
                     const texts = stickerConfigs.filter(c => c.showText).map(c => c.text);
                     const info = await generateStickerPackageInfo(mainSticker.url, texts);
                     setStickerPackageInfo(info);
@@ -1204,8 +1288,24 @@ export const App = () => {
                                     </div>
                                 )}
 
-                                {/* GENERATION QUALITY / COST SWITCHER */}
+                                {/* GENERATION ENGINE + QUALITY / COST SWITCHER */}
                                 <div className="flex flex-col items-center gap-2 mb-4">
+                                    {openaiAvailable && (
+                                        <div className={`p-1 rounded-xl flex gap-1 text-xs ${theme === 'dark' ? 'bg-black/40 border border-white/10' : 'bg-slate-200'}`}>
+                                            <button
+                                                onClick={() => handleEngineChange('GEMINI')}
+                                                className={`px-4 py-1.5 rounded-lg font-bold transition-all ${imageEngine === 'GEMINI' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-blue-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
+                                            >
+                                                {t('engineGemini')}
+                                            </button>
+                                            <button
+                                                onClick={() => handleEngineChange('OPENAI')}
+                                                className={`px-4 py-1.5 rounded-lg font-bold transition-all ${imageEngine === 'OPENAI' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-teal-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
+                                            >
+                                                {t('engineOpenAI')}
+                                            </button>
+                                        </div>
+                                    )}
                                     <div className={`p-1 rounded-xl flex gap-1 text-xs ${theme === 'dark' ? 'bg-black/40 border border-white/10' : 'bg-slate-200'}`}>
                                         <button
                                             onClick={() => handleQualityChange('QUALITY')}
@@ -1221,7 +1321,9 @@ export const App = () => {
                                         </button>
                                     </div>
                                     <p className={`text-[11px] max-w-lg text-center ${theme === 'dark' ? 'text-indigo-300/70' : 'text-slate-400'}`}>
-                                        {genQuality === 'QUALITY' ? t('qualityProHint') : t('qualityEcoHint')}
+                                        {imageEngine === 'OPENAI'
+                                            ? (genQuality === 'QUALITY' ? t('qualityProHintOpenAI') : t('qualityEcoHintOpenAI'))
+                                            : (genQuality === 'QUALITY' ? t('qualityProHint') : t('qualityEcoHint'))}
                                     </p>
                                 </div>
 
@@ -1659,12 +1761,31 @@ export const App = () => {
                                     <h2 className="text-3xl font-black text-slate-800">{t('configTitle')} 📝</h2>
                                     <p className="text-slate-500 mt-2">{t('configSubtitle')}</p>
                                 </div>
-                                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex gap-4 items-center">
+                                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center">
                                     <div className="flex gap-2 items-center">
                                         <span className="text-xs font-bold text-slate-400">{t('quantityLabel')}</span>
                                         <select value={stickerQuantity} onChange={(e) => handleQuantityChange(Number(e.target.value) as StickerQuantity)} className="bg-slate-50 border-none rounded-lg font-bold text-slate-700 focus:ring-2 focus:ring-indigo-200 py-2">
                                             {validQuantities.map(n => <option key={n} value={n}>{n} {t('unitSheet')}</option>)}
                                         </select>
+                                    </div>
+                                    <div className="flex gap-2 items-center">
+                                        <span className="text-xs font-bold text-slate-400">{t('genModeLabel')}</span>
+                                        <div className="flex bg-slate-100 p-1 rounded-lg">
+                                            <button
+                                                onClick={() => handleGenModeChange('SHEET')}
+                                                title={t('genModeSheetHint')}
+                                                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${genMode === 'SHEET' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                            >
+                                                🧩 {t('genModeSheet')}
+                                            </button>
+                                            <button
+                                                onClick={() => handleGenModeChange('INDIVIDUAL')}
+                                                title={t('genModeSingleHint')}
+                                                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${genMode === 'INDIVIDUAL' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                            >
+                                                🎯 {t('genModeSingle')}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1824,12 +1945,12 @@ export const App = () => {
                                             {t('generateTabThumb')}
                                         </button>
                                     )}
-                                    <button onClick={() => generateFrameZip(finalStickers, zipFileName || "MyStickers", finalStickers.find(s => s.id === mainStickerId)?.url, stickerPackageInfo || undefined, stickerType)} className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform hover:-translate-y-1 whitespace-nowrap"><DownloadIcon /> {t('downloadAll')}</button>
+                                    <button onClick={() => { const done = finalStickers.filter(s => s.status === 'SUCCESS'); if (done.length === 0) return; generateFrameZip(done, zipFileName || "MyStickers", done.find(s => s.id === mainStickerId)?.url, stickerPackageInfo || undefined, stickerType); }} className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform hover:-translate-y-1 whitespace-nowrap"><DownloadIcon /> {t('downloadAll')}</button>
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
                                 {finalStickers.map((sticker, idx) => (
-                                    <StickerCard key={sticker.id} sticker={sticker} countdown={0} isMain={sticker.id === mainStickerId} onRetry={() => { }} onDownload={() => { const a = document.createElement('a'); a.href = sticker.url; a.download = `sticker_${idx + 1}.png`; a.click(); }} onEdit={() => handleMagicEdit(sticker.id)} onSetMain={() => setMainStickerId(sticker.id)} />
+                                    <StickerCard key={sticker.id} sticker={sticker} countdown={0} isMain={sticker.id === mainStickerId} onRetry={() => handleRetrySticker(sticker.id)} onDownload={() => { const a = document.createElement('a'); a.href = sticker.url; a.download = `sticker_${idx + 1}.png`; a.click(); }} onEdit={() => handleMagicEdit(sticker.id)} onSetMain={() => setMainStickerId(sticker.id)} />
                                 ))}
                             </div>
                             {stickerPackageInfo && (

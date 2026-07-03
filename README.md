@@ -23,24 +23,47 @@ npm install
 - 預設 Key 僅保留於本次連線（記憶體），重新整理後需重新輸入。
 - 勾選「記住 API Key」後，Key 會以 Base64 形式儲存在瀏覽器的 `localStorage`，僅存於您的裝置，不會上傳至任何伺服器。
 
-### 2.5 生成品質 / 成本模式
-主畫面提供兩種生圖模式（可隨時切換，設定會記住）：
+### 2.5 生圖引擎、品質與成本
 
-| 模式 | 使用模型 | 特性 | 約略成本 |
-|------|---------|------|---------|
-| 💎 高品質 | `gemini-3-pro-image-preview` | 網格/版面遵循度最佳，支援 2K/4K | ~$0.13–0.24 / 張大圖 |
-| 🪙 經濟 | `gemini-2.5-flash-image` | 便宜 3~6 倍，1024px，適合 8–16 張小套組 | ~$0.04 / 張大圖 |
+主畫面提供引擎與品質切換（設定會記住）。2026 年 7 月的模型選型分析：
 
-高品質模式生成失敗時會自動降級改用經濟模型重試。模型 ID 可用環境變數覆寫（因 preview 模型可能更版）：
+| 模型 | 排名* | 約略成本/張 | 優勢 | 弱點（對本專案） |
+|------|------|-----------|------|----------------|
+| **Gemini 3 Pro Image**（Nano Banana Pro，預設高品質） | 前段 | $0.13–0.24 | 複雜版面/網格遵循、長文與中文字渲染最強、4K | 最貴 |
+| **Gemini 3.1 Flash Image**（Nano Banana 2，預設經濟） | #3 | $0.045–0.15 | 性價比最高、支援 4K 與寬幅、角色一致性佳 | 複雜網格稍遜 Pro |
+| **GPT Image 2**（OpenAI，選用引擎） | #1 | $0.05（中）/$0.21（高）；含參考圖 ×2–3 | 指令遵循全場最佳、可到 3840px | 需組織驗證、參考圖計費貴 |
+| Seedream 4.5（ByteDance） | 前段 | ~$0.04 | 文字渲染極強、4K、便宜 | 無瀏覽器直連 BYOK 通道（需經 fal/BytePlus 代理） |
+| FLUX.2（BFL） | 前段 | 中 | 開放權重、最多 10 張參考圖 | API 無瀏覽器 CORS，需後端 |
+| Imagen 4 Ultra（Google） | 前段 | ~$0.03–0.06 | 寫實最強 | 無法用參考圖維持角色一致性 |
+
+\* 生圖競技場盲測排名。**結論**：純前端 + 使用者自帶 Key 的架構下，Gemini 系列（CORS 開放、單一 Key、中文字與網格最強）仍是主引擎最佳解，GPT Image 2 作為進階選用引擎。
+
+模型 ID 可用環境變數覆寫（模型更版時不需改程式碼）：
 
 ```bash
 # .env.local（皆為選填）
-VITE_IMAGE_MODEL_PRO=gemini-3-pro-image-preview
-VITE_IMAGE_MODEL_FLASH=gemini-2.5-flash-image
+VITE_IMAGE_MODEL_PRO=gemini-3-pro-image
+VITE_IMAGE_MODEL_FLASH=gemini-3.1-flash-image
+VITE_IMAGE_MODEL_LEGACY=gemini-2.5-flash-image
 VITE_TEXT_MODEL=gemini-2.5-flash
+VITE_OPENAI_IMAGE_MODEL=gpt-image-2
+VITE_OPENAI_IMAGE_MODEL_FALLBACK=gpt-image-1.5
 ```
 
-### 2.6 Google 帳號登入（選用）
+### 2.6 生成方式（Strategy）
+
+| 方式 | 流程 | 適合 |
+|------|------|------|
+| 🧩 整張底圖 | 一次生成網格大圖 → 輪廓偵測自動切割 | 省成本 |
+| 🎯 逐張生成 | 每張貼圖獨立生成（並行 2 路）→ 去背 → 直接輸出 LINE 規格 | 高成功率、可單張重試 |
+
+### 2.7 影像管線
+
+- **切割**：輪廓偵測 + 網格歸位（取代逐行掃描），對版面漂移更穩健；同格的分離元素（角色 + 漂浮文字）會自動合併。
+- **去背**：HSV 綠幕遮罩（自動偵測非綠背景改用色差模式）＋ alpha 高斯柔邊。
+- **去綠邊（Despill）**：柔邊帶內偏綠像素的綠色通道會被壓制到 max(R,B)，消除綠色鑲邊。
+
+### 2.8 Google 帳號登入（選用）
 可讓使用者以 Google 帳號登入（顯示頭像與名稱、個人化體驗）。注意：登入不能取代 Gemini API Key，Key 仍需自行提供。
 
 設定步驟：

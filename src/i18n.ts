@@ -259,8 +259,25 @@ export const translations = {
         // Generation Quality
         qualityPro: "高品質 (Pro)",
         qualityEco: "經濟 (Flash)",
-        qualityProHint: "使用 Gemini 3 Pro 生圖：版面與網格遵循度最佳、支援 2K/4K，成本較高（約 $0.13~0.24/張大圖）。失敗時自動改用經濟模型。",
-        qualityEcoHint: "使用 Gemini Flash Image 生圖：成本便宜約 3~6 倍（約 $0.04/張大圖），解析度 1024px，建議搭配 8~16 張的小套組使用。",
+        qualityProHint: "Gemini 3 Pro（Nano Banana Pro）：複雜版面與中文字渲染最強，約 $0.13~0.24/張大圖。失敗時自動降級。",
+        qualityEcoHint: "Gemini 3.1 Flash（Nano Banana 2）：約 $0.067~0.15/張大圖，支援至 4K，速度快、性價比最高。",
+        qualityProHintOpenAI: "GPT Image 2 高品質：目前綜合排名第一，1024px 約 $0.21/張，含參考圖約 2~3 倍。",
+        qualityEcoHintOpenAI: "GPT Image 2 中品質：1024px 約 $0.05/張，含參考圖約 2~3 倍。",
+
+        // Image Engine
+        advancedOptions: "進階選項",
+        openaiKeyLabel: "OpenAI API Key（選填：啟用 GPT Image 2 生圖引擎）",
+        openaiKeyPlaceholder: "sk-...",
+        openaiKeyNote: "GPT Image 2 為目前綜合排名第一的生圖模型，但需要已完成「組織驗證」的 OpenAI 帳號。文案與分析功能仍使用 Gemini，因此 Gemini Key 為必填。",
+        engineGemini: "Google Gemini",
+        engineOpenAI: "OpenAI GPT Image",
+
+        // Generation Mode
+        genModeLabel: "生成方式",
+        genModeSheet: "整張底圖",
+        genModeSingle: "逐張生成",
+        genModeSheetHint: "一次生成整張網格大圖再自動切割，最省成本，但版面偶爾會失準。",
+        genModeSingleHint: "每張貼圖獨立生成，不需切割、可單張重試，成功率最高，成本較高（每張約一次生圖費用）。",
 
         // Upload / Input Step
         changeImage: "更換圖片",
@@ -569,8 +586,25 @@ export const translations = {
         // Generation Quality
         qualityPro: "Quality (Pro)",
         qualityEco: "Economy (Flash)",
-        qualityProHint: "Gemini 3 Pro image model: best grid/layout adherence, 2K/4K output, higher cost (~$0.13-0.24 per sheet). Falls back to the economy model on failure.",
-        qualityEcoHint: "Gemini Flash Image: ~3-6x cheaper (~$0.04 per sheet) at 1024px. Best for smaller 8-16 sticker sets.",
+        qualityProHint: "Gemini 3 Pro (Nano Banana Pro): best complex layout & CJK text rendering, ~$0.13-0.24 per sheet. Auto-fallback on failure.",
+        qualityEcoHint: "Gemini 3.1 Flash (Nano Banana 2): ~$0.067-0.15 per sheet, up to 4K, fast and the best value.",
+        qualityProHintOpenAI: "GPT Image 2 high quality: current #1 ranked model, ~$0.21 per 1024px image, 2-3x with reference images.",
+        qualityEcoHintOpenAI: "GPT Image 2 medium quality: ~$0.05 per 1024px image, 2-3x with reference images.",
+
+        // Image Engine
+        advancedOptions: "Advanced options",
+        openaiKeyLabel: "OpenAI API Key (optional: enables the GPT Image 2 engine)",
+        openaiKeyPlaceholder: "sk-...",
+        openaiKeyNote: "GPT Image 2 is the current top-ranked image model but requires an OpenAI account with completed Organization Verification. Copywriting/analysis still uses Gemini, so the Gemini key stays required.",
+        engineGemini: "Google Gemini",
+        engineOpenAI: "OpenAI GPT Image",
+
+        // Generation Mode
+        genModeLabel: "Strategy",
+        genModeSheet: "Grid Sheet",
+        genModeSingle: "One-by-one",
+        genModeSheetHint: "Generates one big grid image then auto-slices. Cheapest, but layout occasionally drifts.",
+        genModeSingleHint: "Generates each sticker independently: no slicing, per-sticker retry, highest success rate, higher cost (one generation per sticker).",
 
         // Upload / Input Step
         changeImage: "Change Image",

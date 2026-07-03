@@ -4,16 +4,22 @@ import { GeneratedImage, StickerConfig, InputMode, StickerType, FontConfig, Shee
 import { stripMimeType, getMimeType, wait } from "./utils";
 
 // --- Model Configuration -----------------------------------------------
-// Centralized so preview-model deprecations only need a change here (or an
-// env override at build time, without touching code).
-const IMAGE_MODEL_PRO = import.meta.env.VITE_IMAGE_MODEL_PRO || 'gemini-3-pro-image-preview';
-const IMAGE_MODEL_FLASH = import.meta.env.VITE_IMAGE_MODEL_FLASH || 'gemini-2.5-flash-image';
+// Centralized so model deprecations only need a change here (or an env
+// override at build time, without touching code).
+//
+// Current defaults (July 2026):
+// - gemini-3-pro-image      (Nano Banana Pro, GA): best complex layout & typography
+// - gemini-3.1-flash-image  (Nano Banana 2, GA): fast/cheap, up to 4K
+// - gemini-2.5-flash-image  legacy last-resort fallback
+const IMAGE_MODEL_PRO = import.meta.env.VITE_IMAGE_MODEL_PRO || 'gemini-3-pro-image';
+const IMAGE_MODEL_FLASH = import.meta.env.VITE_IMAGE_MODEL_FLASH || 'gemini-3.1-flash-image';
+const IMAGE_MODEL_LEGACY = import.meta.env.VITE_IMAGE_MODEL_LEGACY || 'gemini-2.5-flash-image';
 const TEXT_MODEL = import.meta.env.VITE_TEXT_MODEL || 'gemini-2.5-flash';
 const VALIDATION_MODEL = TEXT_MODEL; // Vision QA needs JSON output -> text model with vision
 
 // Quality mode: 'QUALITY' uses the Pro image model (better layout adherence,
-// 2K/4K output, ~3-6x the cost). 'ECONOMY' uses Flash Image for everything.
-// Either way, Pro failures automatically fall back to Flash.
+// ~2x the cost). 'ECONOMY' uses Flash Image for everything.
+// Either way, failures automatically fall back down the chain.
 export type QualityMode = 'QUALITY' | 'ECONOMY';
 const QUALITY_MODE_KEY = 'gen_quality_mode';
 
@@ -30,22 +36,45 @@ export const setQualityMode = (mode: QualityMode) => {
     try { localStorage.setItem(QUALITY_MODE_KEY, mode); } catch { /* private mode */ }
 };
 
-// Ordered candidate list for image generation: primary first, fallback after.
-const getImageModelChain = (): string[] => {
-    if (qualityMode === 'ECONOMY') return [IMAGE_MODEL_FLASH];
-    return [IMAGE_MODEL_PRO, IMAGE_MODEL_FLASH];
+// Image engine: Google Gemini (default) or OpenAI GPT Image (optional,
+// requires a separate OpenAI API key from a verified organization).
+export type ImageEngine = 'GEMINI' | 'OPENAI';
+const IMAGE_ENGINE_KEY = 'image_engine';
+
+let imageEngine: ImageEngine = (() => {
+    try {
+        const stored = typeof window !== 'undefined' ? localStorage.getItem(IMAGE_ENGINE_KEY) : null;
+        return stored === 'OPENAI' ? 'OPENAI' : 'GEMINI';
+    } catch { return 'GEMINI'; }
+})();
+
+export const getImageEngine = (): ImageEngine => imageEngine;
+export const setImageEngine = (engine: ImageEngine) => {
+    imageEngine = engine;
+    try { localStorage.setItem(IMAGE_ENGINE_KEY, engine); } catch { /* private mode */ }
 };
 
-// imageSize (2K/4K) is only supported by the Pro image model; Flash renders 1024px.
+// Ordered candidate list for image generation: primary first, fallbacks after.
+const getImageModelChain = (): string[] => {
+    if (qualityMode === 'ECONOMY') return [IMAGE_MODEL_FLASH, IMAGE_MODEL_LEGACY];
+    return [IMAGE_MODEL_PRO, IMAGE_MODEL_FLASH, IMAGE_MODEL_LEGACY];
+};
+
+// imageSize (1K/2K/4K) is supported by the Gemini 3 generation image models;
+// the legacy 2.5 flash image model renders 1024px only.
 const buildImageConfig = (model: string, opts: { aspectRatio?: string; imageSize?: string }) => {
     const config: Record<string, string> = {};
     if (opts.aspectRatio) config.aspectRatio = opts.aspectRatio;
-    if (opts.imageSize && model === IMAGE_MODEL_PRO) config.imageSize = opts.imageSize;
+    if (opts.imageSize && model.startsWith('gemini-3')) config.imageSize = opts.imageSize;
     return config;
 };
 // -----------------------------------------------------------------------
 
 import { loadApiKey } from "./storageUtils";
+import { openaiGenerateImage, OpenAIAspect } from "./openaiImageService";
+
+// Maps the app-wide quality mode onto OpenAI's quality parameter.
+const openaiQuality = (): 'high' | 'medium' => (qualityMode === 'QUALITY' ? 'high' : 'medium');
 
 // Helper to get a fresh AI instance with the current key
 let dynamicApiKey = '';
@@ -405,6 +434,18 @@ export const generateIPCharacter = async (sourceImageDataUrl: string, style: str
        - ** ENSURE FULL BODY VISIBILITY.**
     `;
 
+    if (getImageEngine() === 'OPENAI') {
+        const url = await openaiGenerateImage({
+            prompt: inputMode === 'TEXT_PROMPT'
+                ? `Create unique IP character: "${sourceImageDataUrl}".\n${coreRequirements}`
+                : `Transform the reference image into an IP character.\n${coreRequirements}`,
+            images: inputMode === 'TEXT_PROMPT' ? undefined : [sourceImageDataUrl],
+            aspect: '1:1',
+            quality: openaiQuality(),
+        });
+        return { id: `char-${Date.now()}`, url, type: 'STATIC' };
+    }
+
     let parts: any[] = [];
     if (inputMode === 'TEXT_PROMPT') {
         parts = [{ text: `Create unique IP character: "${sourceImageDataUrl}".\n${coreRequirements} ` }];
@@ -622,6 +663,16 @@ export const generateGroupCharacterSheet = async (
 
     parts.push({ text: systemPrompt });
 
+    if (getImageEngine() === 'OPENAI') {
+        const url = await openaiGenerateImage({
+            prompt: systemPrompt,
+            images: validImages.map(c => c.image!),
+            aspect: '16:9',
+            quality: openaiQuality(),
+        });
+        return { id: `group-${Date.now()}`, url, type: 'STATIC' };
+    }
+
     const models = getImageModelChain();
     let lastError: unknown = null;
     for (const model of models) {
@@ -743,6 +794,16 @@ Spacing: Ensure > 3 % green gap between all stickers(Vertical & Horizontal).
         `;
     }
 
+    if (getImageEngine() === 'OPENAI') {
+        const url = await openaiGenerateImage({
+            prompt: basePrompt,
+            images: [characterUrl],
+            aspect: bestAR as OpenAIAspect,
+            quality: openaiQuality(),
+        });
+        return { url };
+    }
+
     // Static Generation Loop: retry primary model, then fall back to the next
     // model in the chain (QUALITY: Pro -> Flash; ECONOMY: Flash only).
     const chain = getImageModelChain();
@@ -772,6 +833,74 @@ Spacing: Ensure > 3 % green gap between all stickers(Vertical & Horizontal).
     throw new Error("Failed to generate static sheet.");
 };
 
+/**
+ * PER-STICKER GENERATION (Individual mode)
+ * Generates ONE sticker on a green screen from the character reference.
+ * Compared to the big-sheet approach this costs more per set but removes the
+ * grid-slicing failure mode entirely and allows per-sticker retry.
+ */
+export const generateSingleSticker = async (
+    characterUrl: string,
+    config: StickerConfig,
+    style: string,
+    stickerType: StickerType = 'STATIC'
+): Promise<string> => {
+    const textRule = config.showText && config.text
+        ? `**TEXT:** Render the caption "${config.text}" in Traditional Chinese as a physical object the character INTERACTS with (holding, leaning, sitting on). Bubble/pop-art typography, thin black inner outline + thick white outer outline. Text must NOT be green or black, must NOT cover the face.`
+        : `**TEXT:** Do NOT render any text.`;
+
+    const outlineRule = stickerType === 'EMOJI'
+        ? `**STYLE:** LINE emoji (small 180px target). Bold clear lines, no white sticker border, character fills the frame (full bleed) while keeping a thin green margin on all sides.`
+        : `**STYLE:** LINE sticker. Add a thick (15px) solid WHITE sticker outline around the character and text.`;
+
+    const prompt = `
+Draw EXACTLY ONE sticker of the reference character on a pure solid green (#00FF00) background.
+
+**ACTION / EMOTION:** ${config.emotionPrompt}${config.emotionPromptCN ? ` (${config.emotionPromptCN})` : ''}
+${textRule}
+${outlineRule}
+
+**RULES:**
+1. Keep the reference character's design, colors and proportions EXACTLY consistent.
+2. Background: 100% pure green #00FF00, no gradients, no shadows on the background, no frame or border lines.
+3. Never use green (#00FF00 or similar) inside the artwork. Fading effects must fade to WHITE, never to green.
+4. Single centered composition with a clear green margin (at least 5% of the canvas) on all sides.
+5. Art style: ${style}.
+`;
+
+    if (getImageEngine() === 'OPENAI') {
+        return openaiGenerateImage({
+            prompt,
+            images: [characterUrl],
+            aspect: '1:1',
+            quality: openaiQuality(),
+        });
+    }
+
+    const ai = getAI();
+    const models = getImageModelChain();
+    let lastError: unknown = null;
+    for (const model of models) {
+        try {
+            return await callWithRetry(async () => {
+                const response = await ai.models.generateContent({
+                    model,
+                    contents: { parts: [{ inlineData: { mimeType: 'image/png', data: stripMimeType(characterUrl) } }, { text: prompt }] },
+                    config: { imageConfig: buildImageConfig(model, { aspectRatio: "1:1", imageSize: "1K" }) }
+                });
+                validateResponse(response);
+                const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                if (!part?.inlineData?.data) throw new Error("No image data.");
+                return `data:image/png;base64,${part.inlineData.data}`;
+            }, 1);
+        } catch (e) {
+            console.warn(`[generateSingleSticker] ${model} failed, trying next model...`, e);
+            lastError = e;
+        }
+    }
+    throw lastError;
+};
+
 export const editSticker = async (markedImage: string, prompt: string): Promise<GeneratedImage> => {
     const ai = getAI();
     const base64Data = stripMimeType(markedImage);
@@ -790,6 +919,16 @@ export const editSticker = async (markedImage: string, prompt: string): Promise<
     4. ** BACKGROUND **: Keep the background Pure Green(#00FF00).
     5. ** COLOR SAFETY **: Do NOT use bright green in the new content.If generating effects, fade to WHITE, not green.
     `;
+
+    if (getImageEngine() === 'OPENAI') {
+        const url = await openaiGenerateImage({
+            prompt: editPrompt,
+            images: [markedImage],
+            aspect: 'auto',
+            quality: openaiQuality(),
+        });
+        return { id: `edited-${Date.now()}`, url, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
+    }
 
     // Model chain fallback (QUALITY: Pro -> Flash; ECONOMY: Flash only)
     const models = getImageModelChain();

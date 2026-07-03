@@ -1,18 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '../LanguageContext';
 import { loadApiKey, saveApiKey, clearApiKey } from '../services/storageUtils';
+import { getOpenAIApiKey, saveOpenAIApiKey, clearOpenAIApiKey } from '../services/openaiImageService';
 import { isGoogleLoginEnabled, renderGoogleButton, loadGoogleProfile, GoogleProfile } from '../services/googleAuth';
 import { MagicWandIcon } from './Icons';
 
 import { ApiKeyModal } from './ApiKeyModal';
 
 interface LandingPageProps {
-    onStart: (key: string) => void;
+    onStart: (key: string, openaiKey?: string) => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
     const { language, setLanguage: setSysLang, t } = useLanguage();
     const [key, setKey] = useState("");
+    const [openaiKey, setOpenaiKey] = useState("");
+    const [showAdvanced, setShowAdvanced] = useState(false);
     const [remember, setRemember] = useState(false);
     const [showGuideModal, setShowGuideModal] = useState(false);
     const [profile, setProfile] = useState<GoogleProfile | null>(() => loadGoogleProfile());
@@ -28,6 +31,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
             setKey(stored);
             setRemember(true);
         }
+        const storedOpenai = getOpenAIApiKey();
+        if (storedOpenai) {
+            setOpenaiKey(storedOpenai);
+            setShowAdvanced(true);
+        }
     }, []);
 
     useEffect(() => {
@@ -39,13 +47,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const trimmed = key.trim();
+        const trimmedOpenai = openaiKey.trim();
         if (trimmed.length > 10) {
             if (remember) {
                 saveApiKey(trimmed);
+                if (trimmedOpenai) saveOpenAIApiKey(trimmedOpenai);
+                else clearOpenAIApiKey();
             } else {
                 clearApiKey();
+                clearOpenAIApiKey();
             }
-            onStart(trimmed);
+            onStart(trimmed, trimmedOpenai || undefined);
         } else {
             alert(t('invalidKey'));
         }
@@ -111,6 +123,29 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
                             placeholder={t('apiKeyPlaceholder')}
                             className="w-full px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all"
                         />
+                    </div>
+
+                    <div>
+                        <button
+                            type="button"
+                            onClick={() => setShowAdvanced(!showAdvanced)}
+                            className="text-[11px] text-indigo-300/80 hover:text-indigo-200 font-bold flex items-center gap-1 transition-colors"
+                        >
+                            <span>{showAdvanced ? '▾' : '▸'}</span> {t('advancedOptions')}
+                        </button>
+                        {showAdvanced && (
+                            <div className="mt-3 space-y-2 animate-fade-in">
+                                <label className="block text-xs font-medium text-indigo-200">{t('openaiKeyLabel')}</label>
+                                <input
+                                    type="password"
+                                    value={openaiKey}
+                                    onChange={(e) => setOpenaiKey(e.target.value)}
+                                    placeholder={t('openaiKeyPlaceholder')}
+                                    className="w-full px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition-all"
+                                />
+                                <p className="text-[10px] text-white/40 leading-relaxed">{t('openaiKeyNote')}</p>
+                            </div>
+                        )}
                     </div>
 
                     <label className="flex items-center gap-2 text-xs text-indigo-200 cursor-pointer select-none">
