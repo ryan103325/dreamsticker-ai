@@ -24,6 +24,7 @@ import {
 import { useLanguage } from './LanguageContext';
 import { generateIPCharacter, generateStickerSheet, editSticker, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish, generateStickerPlan, parseStructuredStickerPlan, analyzeImageSubject, generateSimpleIcons, getQualityMode, setQualityMode, QualityMode, getImageEngine, setImageEngine, ImageEngine } from './services/geminiService';
 import { setOpenAIApiKey, hasOpenAIKey } from './services/openaiImageService';
+import { setHFToken, hasHFToken } from './services/hfImageService';
 import { generateFrameZip, resizeImage, extractDominantColors, processGreenScreenImage, generateTabImage, fitImageToCanvas } from './services/utils';
 import { generateSingleSticker } from './services/geminiService';
 import { processGreenScreenAndSlice, waitForOpenCV } from './services/opencvService';
@@ -438,8 +439,9 @@ export const App = () => {
         setQualityMode(mode);
     };
 
-    // Image Engine (Google Gemini vs OpenAI GPT Image; OpenAI needs its own key)
+    // Image Engine (Gemini default; OpenAI / Hugging Face need their own keys)
     const [openaiAvailable, setOpenaiAvailable] = useState<boolean>(hasOpenAIKey());
+    const [hfAvailable, setHfAvailable] = useState<boolean>(hasHFToken());
     const [imageEngine, setImageEngineState] = useState<ImageEngine>(getImageEngine());
     const handleEngineChange = (engine: ImageEngine) => {
         setImageEngineState(engine);
@@ -461,10 +463,11 @@ export const App = () => {
     const estimatedCost = useMemo(() => {
         if (genMode === 'INDIVIDUAL') {
             // Individual mode is pinned to the economy tier (see geminiService)
-            const perSticker = imageEngine === 'OPENAI' ? 0.13 : 0.067;
+            const perSticker = imageEngine === 'OPENAI' ? 0.13 : imageEngine === 'HF' ? 0.03 : 0.067;
             return `$${(stickerQuantity * perSticker).toFixed(2)}`;
         }
         if (imageEngine === 'OPENAI') return genQuality === 'QUALITY' ? '$0.5' : '$0.15';
+        if (imageEngine === 'HF') return '$0.02~0.05';
         return genQuality === 'QUALITY' ? '$0.13~0.24' : '$0.10~0.15';
     }, [genMode, stickerQuantity, imageEngine, genQuality]);
 
@@ -515,14 +518,17 @@ export const App = () => {
     const [hasKey, setHasKey] = useState(false);
     const [googleProfile, setGoogleProfile] = useState<GoogleProfile | null>(() => loadGoogleProfile());
 
-    const setKeyAndStart = (key: string, openaiKey?: string) => {
+    const setKeyAndStart = (key: string, openaiKey?: string, hfToken?: string) => {
         setApiKey(key);
-        if (openaiKey) {
-            setOpenAIApiKey(openaiKey);
-            setOpenaiAvailable(true);
-        } else {
-            setOpenaiAvailable(hasOpenAIKey());
-            if (!hasOpenAIKey()) handleEngineChange('GEMINI');
+        if (openaiKey) setOpenAIApiKey(openaiKey);
+        if (hfToken) setHFToken(hfToken);
+        const hasOpenai = !!openaiKey || hasOpenAIKey();
+        const hasHf = !!hfToken || hasHFToken();
+        setOpenaiAvailable(hasOpenai);
+        setHfAvailable(hasHf);
+        // Reset the engine if its key is gone
+        if ((getImageEngine() === 'OPENAI' && !hasOpenai) || (getImageEngine() === 'HF' && !hasHf)) {
+            handleEngineChange('GEMINI');
         }
         setGoogleProfile(loadGoogleProfile());
         setHasKey(true);
@@ -1302,7 +1308,7 @@ export const App = () => {
 
                                 {/* GENERATION ENGINE + QUALITY / COST SWITCHER */}
                                 <div className="flex flex-col items-center gap-2 mb-4">
-                                    {openaiAvailable && (
+                                    {(openaiAvailable || hfAvailable) && (
                                         <div className={`p-1 rounded-xl flex gap-1 text-xs ${theme === 'dark' ? 'bg-black/40 border border-white/10' : 'bg-slate-200'}`}>
                                             <button
                                                 onClick={() => handleEngineChange('GEMINI')}
@@ -1310,15 +1316,25 @@ export const App = () => {
                                             >
                                                 {t('engineGemini')}
                                             </button>
-                                            <button
-                                                onClick={() => handleEngineChange('OPENAI')}
-                                                className={`px-4 py-1.5 rounded-lg font-bold transition-all ${imageEngine === 'OPENAI' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-teal-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
-                                            >
-                                                {t('engineOpenAI')}
-                                            </button>
+                                            {openaiAvailable && (
+                                                <button
+                                                    onClick={() => handleEngineChange('OPENAI')}
+                                                    className={`px-4 py-1.5 rounded-lg font-bold transition-all ${imageEngine === 'OPENAI' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-teal-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
+                                                >
+                                                    {t('engineOpenAI')}
+                                                </button>
+                                            )}
+                                            {hfAvailable && (
+                                                <button
+                                                    onClick={() => handleEngineChange('HF')}
+                                                    className={`px-4 py-1.5 rounded-lg font-bold transition-all ${imageEngine === 'HF' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-amber-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
+                                                >
+                                                    {t('engineHF')}
+                                                </button>
+                                            )}
                                         </div>
                                     )}
-                                    <div className={`p-1 rounded-xl flex gap-1 text-xs ${theme === 'dark' ? 'bg-black/40 border border-white/10' : 'bg-slate-200'}`}>
+                                    <div className={`p-1 rounded-xl gap-1 text-xs ${imageEngine === 'HF' ? 'hidden' : 'flex'} ${theme === 'dark' ? 'bg-black/40 border border-white/10' : 'bg-slate-200'}`}>
                                         <button
                                             onClick={() => handleQualityChange('QUALITY')}
                                             className={`px-4 py-1.5 rounded-lg font-bold transition-all ${genQuality === 'QUALITY' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-indigo-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
@@ -1333,9 +1349,11 @@ export const App = () => {
                                         </button>
                                     </div>
                                     <p className={`text-[11px] max-w-lg text-center ${theme === 'dark' ? 'text-indigo-300/70' : 'text-slate-400'}`}>
-                                        {imageEngine === 'OPENAI'
-                                            ? (genQuality === 'QUALITY' ? t('qualityProHintOpenAI') : t('qualityEcoHintOpenAI'))
-                                            : (genQuality === 'QUALITY' ? t('qualityProHint') : t('qualityEcoHint'))}
+                                        {imageEngine === 'HF'
+                                            ? t('engineHFHint')
+                                            : imageEngine === 'OPENAI'
+                                                ? (genQuality === 'QUALITY' ? t('qualityProHintOpenAI') : t('qualityEcoHintOpenAI'))
+                                                : (genQuality === 'QUALITY' ? t('qualityProHint') : t('qualityEcoHint'))}
                                     </p>
                                 </div>
 

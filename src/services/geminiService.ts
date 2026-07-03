@@ -36,15 +36,16 @@ export const setQualityMode = (mode: QualityMode) => {
     try { localStorage.setItem(QUALITY_MODE_KEY, mode); } catch { /* private mode */ }
 };
 
-// Image engine: Google Gemini (default) or OpenAI GPT Image (optional,
-// requires a separate OpenAI API key from a verified organization).
-export type ImageEngine = 'GEMINI' | 'OPENAI';
+// Image engine: Google Gemini (default), OpenAI GPT Image (optional,
+// requires a verified-organization OpenAI key), or Hugging Face open models
+// (optional, requires a free HF token; Qwen-Image family by default).
+export type ImageEngine = 'GEMINI' | 'OPENAI' | 'HF';
 const IMAGE_ENGINE_KEY = 'image_engine';
 
 let imageEngine: ImageEngine = (() => {
     try {
         const stored = typeof window !== 'undefined' ? localStorage.getItem(IMAGE_ENGINE_KEY) : null;
-        return stored === 'OPENAI' ? 'OPENAI' : 'GEMINI';
+        return stored === 'OPENAI' ? 'OPENAI' : stored === 'HF' ? 'HF' : 'GEMINI';
     } catch { return 'GEMINI'; }
 })();
 
@@ -72,6 +73,7 @@ const buildImageConfig = (model: string, opts: { aspectRatio?: string; imageSize
 
 import { loadApiKey } from "./storageUtils";
 import { openaiGenerateImage, OpenAIAspect } from "./openaiImageService";
+import { hfGenerateImage } from "./hfImageService";
 
 // Maps the app-wide quality mode onto OpenAI's quality parameter.
 const openaiQuality = (): 'high' | 'medium' => (qualityMode === 'QUALITY' ? 'high' : 'medium');
@@ -434,14 +436,25 @@ export const generateIPCharacter = async (sourceImageDataUrl: string, style: str
        - ** ENSURE FULL BODY VISIBILITY.**
     `;
 
+    const ipPrompt = inputMode === 'TEXT_PROMPT'
+        ? `Create unique IP character: "${sourceImageDataUrl}".\n${coreRequirements}`
+        : `Transform the reference image into an IP character.\n${coreRequirements}`;
+
     if (getImageEngine() === 'OPENAI') {
         const url = await openaiGenerateImage({
-            prompt: inputMode === 'TEXT_PROMPT'
-                ? `Create unique IP character: "${sourceImageDataUrl}".\n${coreRequirements}`
-                : `Transform the reference image into an IP character.\n${coreRequirements}`,
+            prompt: ipPrompt,
             images: inputMode === 'TEXT_PROMPT' ? undefined : [sourceImageDataUrl],
             aspect: '1:1',
             quality: openaiQuality(),
+        });
+        return { id: `char-${Date.now()}`, url, type: 'STATIC' };
+    }
+
+    if (getImageEngine() === 'HF') {
+        const url = await hfGenerateImage({
+            prompt: ipPrompt,
+            image: inputMode === 'TEXT_PROMPT' ? undefined : sourceImageDataUrl,
+            aspect: '1:1',
         });
         return { id: `char-${Date.now()}`, url, type: 'STATIC' };
     }
@@ -673,6 +686,17 @@ export const generateGroupCharacterSheet = async (
         return { id: `group-${Date.now()}`, url, type: 'STATIC' };
     }
 
+    if (getImageEngine() === 'HF') {
+        // HF edit models accept a single reference image; remaining characters
+        // are described in the prompt only.
+        const url = await hfGenerateImage({
+            prompt: systemPrompt,
+            image: validImages[0]?.image,
+            aspect: '16:9',
+        });
+        return { id: `group-${Date.now()}`, url, type: 'STATIC' };
+    }
+
     const models = getImageModelChain();
     let lastError: unknown = null;
     for (const model of models) {
@@ -804,6 +828,15 @@ Spacing: Ensure > 3 % green gap between all stickers(Vertical & Horizontal).
         return { url };
     }
 
+    if (getImageEngine() === 'HF') {
+        const url = await hfGenerateImage({
+            prompt: basePrompt,
+            image: characterUrl,
+            aspect: bestAR,
+        });
+        return { url };
+    }
+
     // Static Generation Loop: retry primary model, then fall back to the next
     // model in the chain (QUALITY: Pro -> Flash; ECONOMY: Flash only).
     const chain = getImageModelChain();
@@ -881,6 +914,10 @@ ${outlineRule}
         });
     }
 
+    if (getImageEngine() === 'HF') {
+        return hfGenerateImage({ prompt, image: characterUrl, aspect: '1:1' });
+    }
+
     const ai = getAI();
     const models = [IMAGE_MODEL_FLASH, IMAGE_MODEL_LEGACY];
     let lastError: unknown = null;
@@ -931,6 +968,11 @@ export const editSticker = async (markedImage: string, prompt: string): Promise<
             aspect: 'auto',
             quality: openaiQuality(),
         });
+        return { id: `edited-${Date.now()}`, url, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
+    }
+
+    if (getImageEngine() === 'HF') {
+        const url = await hfGenerateImage({ prompt: editPrompt, image: markedImage, aspect: 'auto' });
         return { id: `edited-${Date.now()}`, url, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
     }
 

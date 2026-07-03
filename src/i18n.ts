@@ -271,6 +271,11 @@ export const translations = {
         openaiKeyNote: "GPT Image 2 為目前綜合排名第一的生圖模型，但需要已完成「組織驗證」的 OpenAI 帳號。文案與分析功能仍使用 Gemini，因此 Gemini Key 為必填。",
         engineGemini: "Google Gemini",
         engineOpenAI: "OpenAI GPT Image",
+        engineHF: "HF 開源 (Qwen)",
+        engineHFHint: "Hugging Face 開源模型（Qwen-Image 系列）：約 $0.02~0.05/張、附每月免費額度，開源模型中「中文字渲染」最強；複雜網格遵循度較弱，建議搭配逐張生成或 8~16 張小網格。",
+        hfKeyLabel: "Hugging Face Token（選填：啟用開源模型引擎）",
+        hfKeyPlaceholder: "hf_...",
+        hfKeyNote: "免費註冊 huggingface.co 即可在 Settings → Access Tokens 建立（選 Read 權限）。每月附免費推論額度，超過後按供應商原價計費、無加成。",
 
         // Generation Mode
         genModeLabel: "生成方式",
@@ -599,6 +604,11 @@ export const translations = {
         openaiKeyNote: "GPT Image 2 is the current top-ranked image model but requires an OpenAI account with completed Organization Verification. Copywriting/analysis still uses Gemini, so the Gemini key stays required.",
         engineGemini: "Google Gemini",
         engineOpenAI: "OpenAI GPT Image",
+        engineHF: "HF Open (Qwen)",
+        engineHFHint: "Hugging Face open models (Qwen-Image family): ~$0.02-0.05 per image with free monthly credits; the strongest open models for Chinese text rendering. Weaker at complex grids - best with one-by-one mode or small 8-16 grids.",
+        hfKeyLabel: "Hugging Face Token (optional: enables the open-model engine)",
+        hfKeyPlaceholder: "hf_...",
+        hfKeyNote: "Sign up free at huggingface.co, then create a token under Settings → Access Tokens (Read scope). Free monthly inference credits included; beyond that, provider list price with no markup.",
 
         // Generation Mode
         genModeLabel: "Strategy",

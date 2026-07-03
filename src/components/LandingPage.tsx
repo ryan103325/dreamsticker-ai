@@ -2,19 +2,21 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '../LanguageContext';
 import { loadApiKey, saveApiKey, clearApiKey } from '../services/storageUtils';
 import { getOpenAIApiKey, saveOpenAIApiKey, clearOpenAIApiKey } from '../services/openaiImageService';
+import { getHFToken, saveHFToken, clearHFToken } from '../services/hfImageService';
 import { isGoogleLoginEnabled, renderGoogleButton, loadGoogleProfile, GoogleProfile } from '../services/googleAuth';
 import { MagicWandIcon } from './Icons';
 
 import { ApiKeyModal } from './ApiKeyModal';
 
 interface LandingPageProps {
-    onStart: (key: string, openaiKey?: string) => void;
+    onStart: (key: string, openaiKey?: string, hfToken?: string) => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
     const { language, setLanguage: setSysLang, t } = useLanguage();
     const [key, setKey] = useState("");
     const [openaiKey, setOpenaiKey] = useState("");
+    const [hfToken, setHfToken] = useState("");
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [remember, setRemember] = useState(false);
     const [showGuideModal, setShowGuideModal] = useState(false);
@@ -36,6 +38,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
             setOpenaiKey(storedOpenai);
             setShowAdvanced(true);
         }
+        const storedHf = getHFToken();
+        if (storedHf) {
+            setHfToken(storedHf);
+            setShowAdvanced(true);
+        }
     }, []);
 
     useEffect(() => {
@@ -48,16 +55,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
         e.preventDefault();
         const trimmed = key.trim();
         const trimmedOpenai = openaiKey.trim();
+        const trimmedHf = hfToken.trim();
         if (trimmed.length > 10) {
             if (remember) {
                 saveApiKey(trimmed);
                 if (trimmedOpenai) saveOpenAIApiKey(trimmedOpenai);
                 else clearOpenAIApiKey();
+                if (trimmedHf) saveHFToken(trimmedHf);
+                else clearHFToken();
             } else {
                 clearApiKey();
                 clearOpenAIApiKey();
+                clearHFToken();
             }
-            onStart(trimmed, trimmedOpenai || undefined);
+            onStart(trimmed, trimmedOpenai || undefined, trimmedHf || undefined);
         } else {
             alert(t('invalidKey'));
         }
@@ -144,6 +155,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
                                     className="w-full px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition-all"
                                 />
                                 <p className="text-[10px] text-white/40 leading-relaxed">{t('openaiKeyNote')}</p>
+
+                                <label className="block text-xs font-medium text-indigo-200 pt-2">{t('hfKeyLabel')}</label>
+                                <input
+                                    type="password"
+                                    value={hfToken}
+                                    onChange={(e) => setHfToken(e.target.value)}
+                                    placeholder={t('hfKeyPlaceholder')}
+                                    className="w-full px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent transition-all"
+                                />
+                                <p className="text-[10px] text-white/40 leading-relaxed">{t('hfKeyNote')}</p>
                             </div>
                         )}
                     </div>

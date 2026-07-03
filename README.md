@@ -32,6 +32,7 @@ npm install
 | **Gemini 3 Pro Image**（Nano Banana Pro，預設高品質） | 前段 | $0.13–0.24 | 複雜版面/網格遵循、長文與中文字渲染最強、4K | 最貴 |
 | **Gemini 3.1 Flash Image**（Nano Banana 2，預設經濟） | #3 | $0.045–0.15 | 性價比最高、支援 4K 與寬幅、角色一致性佳 | 複雜網格稍遜 Pro |
 | **GPT Image 2**（OpenAI，選用引擎） | #1 | $0.05（中）/$0.21（高）；含參考圖 ×2–3 | 指令遵循全場最佳、可到 3840px | 需組織驗證、參考圖計費貴 |
+| **Qwen-Image / Qwen-Image-Edit**（開源，經 HF 引擎） | 開源前段 | **~$0.02–0.05** | 開源模型中「中文字渲染」最強、HF 附每月免費額度 | 複雜網格較弱、單參考圖 |
 | Seedream 4.5（ByteDance） | 前段 | ~$0.04 | 文字渲染極強、4K、便宜 | 無瀏覽器直連 BYOK 通道（需經 fal/BytePlus 代理） |
 | FLUX.2（BFL） | 前段 | 中 | 開放權重、最多 10 張參考圖 | API 無瀏覽器 CORS，需後端 |
 | Imagen 4 Ultra（Google） | 前段 | ~$0.03–0.06 | 寫實最強 | 無法用參考圖維持角色一致性 |
@@ -48,7 +49,12 @@ VITE_IMAGE_MODEL_LEGACY=gemini-2.5-flash-image
 VITE_TEXT_MODEL=gemini-2.5-flash
 VITE_OPENAI_IMAGE_MODEL=gpt-image-2
 VITE_OPENAI_IMAGE_MODEL_FALLBACK=gpt-image-1.5
+VITE_HF_IMAGE_MODEL=Qwen/Qwen-Image
+VITE_HF_EDIT_MODEL=Qwen/Qwen-Image-Edit
 ```
+
+**第三引擎：Hugging Face 開源模型（最省錢）**
+在首頁「進階選項」填入 HF Token（[huggingface.co](https://huggingface.co) 免費註冊 → Settings → Access Tokens，Read 權限）即可切換到 Qwen-Image 引擎。每月附免費推論額度，之後按供應商原價計費、HF 不加成。透過 HF Inference Providers 路由，模型可用環境變數換成任何開源模型（FLUX.1-Kontext-dev 等）。
 
 ### 2.6 生成方式（Strategy）與成本
 
