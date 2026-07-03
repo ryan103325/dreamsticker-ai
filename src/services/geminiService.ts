@@ -868,17 +868,21 @@ ${outlineRule}
 5. Art style: ${style}.
 `;
 
+    // COST GUARDRAIL: a single sticker's final size is only 370x320 (or
+    // 180x180), so the Pro model / high quality is wasted here. Individual
+    // mode always uses the cheapest capable tier regardless of quality mode:
+    // per-image cost is paid N times per set (vs once for a grid sheet).
     if (getImageEngine() === 'OPENAI') {
         return openaiGenerateImage({
             prompt,
             images: [characterUrl],
             aspect: '1:1',
-            quality: openaiQuality(),
+            quality: 'medium',
         });
     }
 
     const ai = getAI();
-    const models = getImageModelChain();
+    const models = [IMAGE_MODEL_FLASH, IMAGE_MODEL_LEGACY];
     let lastError: unknown = null;
     for (const model of models) {
         try {

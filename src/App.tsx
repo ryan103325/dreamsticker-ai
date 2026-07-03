@@ -456,6 +456,18 @@ export const App = () => {
         try { localStorage.setItem('gen_mode', mode); } catch { /* ignore */ }
     };
 
+    // Rough USD estimate for one generation run, so the cost difference
+    // between strategies is visible BEFORE clicking generate.
+    const estimatedCost = useMemo(() => {
+        if (genMode === 'INDIVIDUAL') {
+            // Individual mode is pinned to the economy tier (see geminiService)
+            const perSticker = imageEngine === 'OPENAI' ? 0.13 : 0.067;
+            return `$${(stickerQuantity * perSticker).toFixed(2)}`;
+        }
+        if (imageEngine === 'OPENAI') return genQuality === 'QUALITY' ? '$0.5' : '$0.15';
+        return genQuality === 'QUALITY' ? '$0.13~0.24' : '$0.10~0.15';
+    }, [genMode, stickerQuantity, imageEngine, genQuality]);
+
     const [fontConfig, setFontConfig] = useState<FontConfig>({
         language: LANGUAGES[0],
         style: FONT_STYLES[1],
@@ -1767,6 +1779,11 @@ export const App = () => {
                                         <select value={stickerQuantity} onChange={(e) => handleQuantityChange(Number(e.target.value) as StickerQuantity)} className="bg-slate-50 border-none rounded-lg font-bold text-slate-700 focus:ring-2 focus:ring-indigo-200 py-2">
                                             {validQuantities.map(n => <option key={n} value={n}>{n} {t('unitSheet')}</option>)}
                                         </select>
+                                    </div>
+                                    <div className="flex gap-2 items-center">
+                                        <span className={`text-[11px] font-bold px-2 py-1 rounded-lg ${genMode === 'INDIVIDUAL' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`} title={genMode === 'INDIVIDUAL' ? t('genModeSingleHint') : t('genModeSheetHint')}>
+                                            💰 {t('costEstimate')}: ~{estimatedCost}
+                                        </span>
                                     </div>
                                     <div className="flex gap-2 items-center">
                                         <span className="text-xs font-bold text-slate-400">{t('genModeLabel')}</span>

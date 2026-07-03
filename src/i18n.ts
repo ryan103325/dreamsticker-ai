@@ -276,8 +276,9 @@ export const translations = {
         genModeLabel: "生成方式",
         genModeSheet: "整張底圖",
         genModeSingle: "逐張生成",
-        genModeSheetHint: "一次生成整張網格大圖再自動切割，最省成本，但版面偶爾會失準。",
-        genModeSingleHint: "每張貼圖獨立生成，不需切割、可單張重試，成功率最高，成本較高（每張約一次生圖費用）。",
+        genModeSheetHint: "一次生成整張網格大圖再自動切割：整組僅約 $0.10~0.24，最省成本（推薦），版面偶爾會失準。",
+        genModeSingleHint: "每張獨立生成（自動鎖定經濟模型）：約 $0.07/張，40 張約 $2.7，比底圖模式貴 10 倍以上。建議先用底圖模式，只對失敗的貼圖按「重試」單張重生（重試就是走這條便宜的單張路徑）。",
+        costEstimate: "預估成本",
 
         // Upload / Input Step
         changeImage: "更換圖片",
@@ -603,8 +604,9 @@ export const translations = {
         genModeLabel: "Strategy",
         genModeSheet: "Grid Sheet",
         genModeSingle: "One-by-one",
-        genModeSheetHint: "Generates one big grid image then auto-slices. Cheapest, but layout occasionally drifts.",
-        genModeSingleHint: "Generates each sticker independently: no slicing, per-sticker retry, highest success rate, higher cost (one generation per sticker).",
+        genModeSheetHint: "One big grid image, auto-sliced: ~$0.10-0.24 per whole set. Cheapest (recommended); layout occasionally drifts.",
+        genModeSingleHint: "Each sticker generated independently (pinned to the economy model): ~$0.07 each, ~$2.7 for 40 - over 10x the sheet cost. Tip: use Grid Sheet first, then hit Retry on failed stickers only (retry uses this cheap single-sticker path).",
+        costEstimate: "Est. cost",
 
         // Upload / Input Step
         changeImage: "Change Image",
