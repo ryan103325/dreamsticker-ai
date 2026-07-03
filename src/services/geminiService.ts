@@ -3,14 +3,49 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { GeneratedImage, StickerConfig, InputMode, StickerType, FontConfig, SheetLayout, getStickerSpec, StickerPackageInfo, STICKER_SPECS, ArtisticFilterType, CharacterInput } from "../types";
 import { stripMimeType, getMimeType, wait } from "./utils";
 
-// Model Definitions
-const IP_DESIGN_MODEL = 'gemini-3-pro-image-preview';
-const STICKER_GEN_MODEL_PRO = 'gemini-3-pro-image-preview';
-const STICKER_GEN_MODEL_FLASH = 'gemini-2.5-flash-image';
-const TEXT_MODEL = 'gemini-2.5-flash';
-const VALIDATION_MODEL = 'gemini-2.5-flash-image'; // Used for QA check
+// --- Model Configuration -----------------------------------------------
+// Centralized so preview-model deprecations only need a change here (or an
+// env override at build time, without touching code).
+const IMAGE_MODEL_PRO = import.meta.env.VITE_IMAGE_MODEL_PRO || 'gemini-3-pro-image-preview';
+const IMAGE_MODEL_FLASH = import.meta.env.VITE_IMAGE_MODEL_FLASH || 'gemini-2.5-flash-image';
+const TEXT_MODEL = import.meta.env.VITE_TEXT_MODEL || 'gemini-2.5-flash';
+const VALIDATION_MODEL = TEXT_MODEL; // Vision QA needs JSON output -> text model with vision
 
-import { saveApiKey, loadApiKey } from "./storageUtils";
+// Quality mode: 'QUALITY' uses the Pro image model (better layout adherence,
+// 2K/4K output, ~3-6x the cost). 'ECONOMY' uses Flash Image for everything.
+// Either way, Pro failures automatically fall back to Flash.
+export type QualityMode = 'QUALITY' | 'ECONOMY';
+const QUALITY_MODE_KEY = 'gen_quality_mode';
+
+let qualityMode: QualityMode = (() => {
+    try {
+        const stored = typeof window !== 'undefined' ? localStorage.getItem(QUALITY_MODE_KEY) : null;
+        return stored === 'ECONOMY' ? 'ECONOMY' : 'QUALITY';
+    } catch { return 'QUALITY'; }
+})();
+
+export const getQualityMode = (): QualityMode => qualityMode;
+export const setQualityMode = (mode: QualityMode) => {
+    qualityMode = mode;
+    try { localStorage.setItem(QUALITY_MODE_KEY, mode); } catch { /* private mode */ }
+};
+
+// Ordered candidate list for image generation: primary first, fallback after.
+const getImageModelChain = (): string[] => {
+    if (qualityMode === 'ECONOMY') return [IMAGE_MODEL_FLASH];
+    return [IMAGE_MODEL_PRO, IMAGE_MODEL_FLASH];
+};
+
+// imageSize (2K/4K) is only supported by the Pro image model; Flash renders 1024px.
+const buildImageConfig = (model: string, opts: { aspectRatio?: string; imageSize?: string }) => {
+    const config: Record<string, string> = {};
+    if (opts.aspectRatio) config.aspectRatio = opts.aspectRatio;
+    if (opts.imageSize && model === IMAGE_MODEL_PRO) config.imageSize = opts.imageSize;
+    return config;
+};
+// -----------------------------------------------------------------------
+
+import { loadApiKey } from "./storageUtils";
 
 // Helper to get a fresh AI instance with the current key
 let dynamicApiKey = '';
@@ -377,17 +412,27 @@ export const generateIPCharacter = async (sourceImageDataUrl: string, style: str
         parts = [{ inlineData: { mimeType: getMimeType(sourceImageDataUrl), data: stripMimeType(sourceImageDataUrl) } }, { text: `Transform IP character.\n${coreRequirements} ` }];
     }
 
-    return callWithRetry(async () => {
-        const response = await ai.models.generateContent({
-            model: IP_DESIGN_MODEL,
-            contents: { parts },
-            config: { imageConfig: { aspectRatio: "1:1" } }
-        });
-        validateResponse(response);
-        const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!part?.inlineData?.data) throw new Error("No image data.");
-        return { id: `char-${Date.now()}`, url: `data:image/png;base64,${part.inlineData.data}`, type: 'STATIC' };
-    });
+    const models = getImageModelChain();
+    let lastError: unknown = null;
+    for (const model of models) {
+        try {
+            return await callWithRetry(async () => {
+                const response = await ai.models.generateContent({
+                    model,
+                    contents: { parts },
+                    config: { imageConfig: buildImageConfig(model, { aspectRatio: "1:1" }) }
+                });
+                validateResponse(response);
+                const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                if (!part?.inlineData?.data) throw new Error("No image data.");
+                return { id: `char-${Date.now()}`, url: `data:image/png;base64,${part.inlineData.data}`, type: 'STATIC' as const };
+            });
+        } catch (e) {
+            console.warn(`[generateIPCharacter] ${model} failed, trying next model...`, e);
+            lastError = e;
+        }
+    }
+    throw lastError;
 };
 
 /**
@@ -415,7 +460,7 @@ export const analyzeImageForCharacterDescription = async (base64Image: string): 
 
     return callWithRetry(async () => {
         const response = await ai.models.generateContent({
-            model: STICKER_GEN_MODEL_FLASH, // Flash is sufficient for vision analysis
+            model: TEXT_MODEL, // Vision analysis outputs text -> text model is cheaper
             contents: {
                 parts: [
                     { inlineData: { mimeType: getMimeType(base64Image), data: stripMimeType(base64Image) } },
@@ -577,27 +622,34 @@ export const generateGroupCharacterSheet = async (
 
     parts.push({ text: systemPrompt });
 
-    return callWithRetry(async () => {
-        const response = await ai.models.generateContent({
-            model: STICKER_GEN_MODEL_PRO, // Use Pro for complex layout adherence and 4K
-            contents: { parts },
-            config: {
-                imageConfig: {
-                    aspectRatio: "16:9",
-                    imageSize: "4K"
-                }
-            }
-        });
-        validateResponse(response);
-        const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!part?.inlineData?.data) throw new Error("No image data.");
+    const models = getImageModelChain();
+    let lastError: unknown = null;
+    for (const model of models) {
+        try {
+            return await callWithRetry(async () => {
+                const response = await ai.models.generateContent({
+                    model, // Pro preferred for complex layout adherence and 4K
+                    contents: { parts },
+                    config: {
+                        imageConfig: buildImageConfig(model, { aspectRatio: "16:9", imageSize: "4K" })
+                    }
+                });
+                validateResponse(response);
+                const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                if (!part?.inlineData?.data) throw new Error("No image data.");
 
-        return {
-            id: `group-${Date.now()}`,
-            url: `data:image/png;base64,${part.inlineData.data}`,
-            type: 'STATIC'
-        };
-    });
+                return {
+                    id: `group-${Date.now()}`,
+                    url: `data:image/png;base64,${part.inlineData.data}`,
+                    type: 'STATIC' as const
+                };
+            });
+        } catch (e) {
+            console.warn(`[generateGroupCharacterSheet] ${model} failed, trying next model...`, e);
+            lastError = e;
+        }
+    }
+    throw lastError;
 };
 
 export const generateStickerSheet = async (characterUrl: string, configs: StickerConfig[], style: string, sheetIndex: number, totalSheets: number, layout?: SheetLayout, fontConfig?: FontConfig, stickerType: StickerType = 'STATIC'): Promise<{ url: string }> => {
@@ -691,15 +743,18 @@ Spacing: Ensure > 3 % green gap between all stickers(Vertical & Horizontal).
         `;
     }
 
-    // Static Generation Loop
-    let attempts = 0;
-    while (attempts < 3) {
+    // Static Generation Loop: retry primary model, then fall back to the next
+    // model in the chain (QUALITY: Pro -> Flash; ECONOMY: Flash only).
+    const chain = getImageModelChain();
+    const attemptModels = chain.length > 1 ? [chain[0], chain[0], chain[1]] : [chain[0], chain[0], chain[0]];
+
+    for (const model of attemptModels) {
         try {
             const response = await ai.models.generateContent({
-                model: STICKER_GEN_MODEL_PRO,
+                model,
                 contents: { parts: [{ inlineData: { mimeType: 'image/png', data: base64Char } }, { text: basePrompt }] },
-                // Use 2K Resolution for Static Sheets to save tokens and time
-                config: { imageConfig: { aspectRatio: bestAR, imageSize: "2K" } }
+                // 2K resolution for static sheets to save tokens and time (Pro only)
+                config: { imageConfig: buildImageConfig(model, { aspectRatio: bestAR, imageSize: "2K" }) }
             });
             validateResponse(response);
             const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
@@ -709,10 +764,8 @@ Spacing: Ensure > 3 % green gap between all stickers(Vertical & Horizontal).
             // Level 1 Check
             const valid = await validateImageDimensions(finalUrl, targetRatio);
             if (valid) return { url: finalUrl };
-            attempts++;
         } catch (e) {
-            console.error(e);
-            attempts++;
+            console.warn(`[generateStickerSheet] ${model} attempt failed`, e);
             await wait(1000);
         }
     }
@@ -738,28 +791,26 @@ export const editSticker = async (markedImage: string, prompt: string): Promise<
     5. ** COLOR SAFETY **: Do NOT use bright green in the new content.If generating effects, fade to WHITE, not green.
     `;
 
-    // Pro -> Flash Fallback
-    try {
-        const response = await ai.models.generateContent({
-            model: STICKER_GEN_MODEL_PRO,
-            contents: { parts: [{ inlineData: { mimeType: 'image/png', data: base64Data } }, { text: editPrompt }] },
-            config: { imageConfig: { imageSize: "4K" } }
-        });
-        validateResponse(response);
-        const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!part?.inlineData?.data) throw new Error("No data");
-        return { id: `edited-${Date.now()}`, url: `data:image/png;base64,${part.inlineData.data}`, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
-    } catch (e) {
-        const response = await ai.models.generateContent({
-            model: STICKER_GEN_MODEL_FLASH,
-            contents: { parts: [{ inlineData: { mimeType: 'image/png', data: base64Data } }, { text: editPrompt }] },
-            config: { imageConfig: {} }
-        });
-        validateResponse(response);
-        const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!part?.inlineData?.data) throw new Error("Edit failed.");
-        return { id: `edited-${Date.now()}`, url: `data:image/png;base64,${part.inlineData.data}`, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
+    // Model chain fallback (QUALITY: Pro -> Flash; ECONOMY: Flash only)
+    const models = getImageModelChain();
+    let lastError: unknown = null;
+    for (const model of models) {
+        try {
+            const response = await ai.models.generateContent({
+                model,
+                contents: { parts: [{ inlineData: { mimeType: 'image/png', data: base64Data } }, { text: editPrompt }] },
+                config: { imageConfig: buildImageConfig(model, { imageSize: "4K" }) }
+            });
+            validateResponse(response);
+            const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+            if (!part?.inlineData?.data) throw new Error("Edit failed.");
+            return { id: `edited-${Date.now()}`, url: `data:image/png;base64,${part.inlineData.data}`, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
+        } catch (e) {
+            console.warn(`[editSticker] ${model} failed, trying next model...`, e);
+            lastError = e;
+        }
     }
+    throw lastError;
 };
 
 export const restyleSticker = async (imageUrl: string, filter: ArtisticFilterType): Promise<GeneratedImage> => {
@@ -768,7 +819,7 @@ export const restyleSticker = async (imageUrl: string, filter: ArtisticFilterTyp
     const prompt = `Redraw in ${filter} style.Maintain pose / comp.Keep 15px white border.`;
 
     const response = await ai.models.generateContent({
-        model: STICKER_GEN_MODEL_FLASH,
+        model: IMAGE_MODEL_FLASH,
         contents: { parts: [{ inlineData: { mimeType: 'image/png', data: stripMimeType(imageUrl) } }, { text: prompt }] },
         config: { imageConfig: {} }
     });

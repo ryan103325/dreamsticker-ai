@@ -252,6 +252,15 @@ export const translations = {
 
         // Landing Page (extra)
         rememberKey: "記住 API Key（僅儲存在此裝置的瀏覽器中）",
+        signInWithGoogle: "使用 Google 帳號登入",
+        signOut: "登出",
+        signedInAs: "已登入",
+
+        // Generation Quality
+        qualityPro: "高品質 (Pro)",
+        qualityEco: "經濟 (Flash)",
+        qualityProHint: "使用 Gemini 3 Pro 生圖：版面與網格遵循度最佳、支援 2K/4K，成本較高（約 $0.13~0.24/張大圖）。失敗時自動改用經濟模型。",
+        qualityEcoHint: "使用 Gemini Flash Image 生圖：成本便宜約 3~6 倍（約 $0.04/張大圖），解析度 1024px，建議搭配 8~16 張的小套組使用。",
 
         // Upload / Input Step
         changeImage: "更換圖片",
@@ -553,6 +562,15 @@ export const translations = {
 
         // Landing Page (extra)
         rememberKey: "Remember API Key (stored only in this browser)",
+        signInWithGoogle: "Sign in with Google",
+        signOut: "Sign out",
+        signedInAs: "Signed in",
+
+        // Generation Quality
+        qualityPro: "Quality (Pro)",
+        qualityEco: "Economy (Flash)",
+        qualityProHint: "Gemini 3 Pro image model: best grid/layout adherence, 2K/4K output, higher cost (~$0.13-0.24 per sheet). Falls back to the economy model on failure.",
+        qualityEcoHint: "Gemini Flash Image: ~3-6x cheaper (~$0.04 per sheet) at 1024px. Best for smaller 8-16 sticker sets.",
 
         // Upload / Input Step
         changeImage: "Change Image",

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '../LanguageContext';
 import { loadApiKey, saveApiKey, clearApiKey } from '../services/storageUtils';
+import { isGoogleLoginEnabled, renderGoogleButton, loadGoogleProfile, GoogleProfile } from '../services/googleAuth';
 import { MagicWandIcon } from './Icons';
 
 import { ApiKeyModal } from './ApiKeyModal';
@@ -14,6 +15,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
     const [key, setKey] = useState("");
     const [remember, setRemember] = useState(false);
     const [showGuideModal, setShowGuideModal] = useState(false);
+    const [profile, setProfile] = useState<GoogleProfile | null>(() => loadGoogleProfile());
+    const googleBtnRef = useRef<HTMLDivElement>(null);
 
     const toggleLang = () => {
         setSysLang(language === 'zh' ? 'en' : 'zh');
@@ -26,6 +29,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
             setRemember(true);
         }
     }, []);
+
+    useEffect(() => {
+        if (isGoogleLoginEnabled() && googleBtnRef.current && !profile) {
+            renderGoogleButton(googleBtnRef.current, setProfile).catch(e => console.warn(e));
+        }
+    }, [profile]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -69,6 +78,27 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
                     <h1 className="text-4xl font-black mb-2 bg-clip-text text-transparent bg-gradient-to-r from-white to-indigo-200">DreamSticker AI</h1>
                     <p className="text-indigo-200">{t('landingTitle')}</p>
                 </div>
+
+                {isGoogleLoginEnabled() && (
+                    <div className="mb-6 flex flex-col items-center gap-3">
+                        {profile ? (
+                            <div className="flex items-center gap-3 bg-white/10 border border-white/20 rounded-full pl-1.5 pr-4 py-1.5">
+                                <img src={profile.picture} alt={profile.name} referrerPolicy="no-referrer" className="w-8 h-8 rounded-full" />
+                                <div className="text-left">
+                                    <p className="text-xs font-bold text-white leading-tight">{profile.name}</p>
+                                    <p className="text-[10px] text-indigo-300 leading-tight">{profile.email}</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div ref={googleBtnRef} className="flex justify-center min-h-[44px]" />
+                        )}
+                        <div className="w-full flex items-center gap-3 text-[10px] text-white/30">
+                            <div className="flex-1 h-px bg-white/10"></div>
+                            <span>API Key</span>
+                            <div className="flex-1 h-px bg-white/10"></div>
+                        </div>
+                    </div>
+                )}
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>

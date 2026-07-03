@@ -22,7 +22,7 @@ import {
     CharacterInput
 } from './types';
 import { useLanguage } from './LanguageContext';
-import { generateIPCharacter, generateStickerSheet, editSticker, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish, generateStickerPlan, parseStructuredStickerPlan, analyzeImageSubject, generateSimpleIcons } from './services/geminiService';
+import { generateIPCharacter, generateStickerSheet, editSticker, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish, generateStickerPlan, parseStructuredStickerPlan, analyzeImageSubject, generateSimpleIcons, getQualityMode, setQualityMode, QualityMode } from './services/geminiService';
 import { generateFrameZip, resizeImage, extractDominantColors, processGreenScreenImage, generateTabImage } from './services/utils';
 import { processGreenScreenAndSlice, waitForOpenCV } from './services/opencvService';
 import { Loader } from './components/Loader';
@@ -31,6 +31,7 @@ import { HelpModal } from './components/HelpModal';
 import { UploadIcon, MagicWandIcon, StickerIcon, DownloadIcon, RefreshIcon, EditIcon, CloseIcon, HelpIcon, StarIcon, CopyIcon, ExternalLinkIcon, FolderOpenIcon, DiceIcon, TrashIcon, ArrowLeftIcon } from './components/Icons';
 import { LandingPage } from './components/LandingPage';
 import { setApiKey } from './services/geminiService';
+import { loadGoogleProfile, clearGoogleProfile, GoogleProfile } from './services/googleAuth';
 
 // Add new step for Smart Crop Preview
 const SHEET_EDITOR_STEP = AppStep.SHEET_EDITOR;
@@ -136,15 +137,15 @@ const StickerCard: React.FC<StickerCardProps> = ({
                         <img src={sticker.url} alt={sticker.emotion} className="max-w-full max-h-full object-contain drop-shadow-sm" />
 
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 backdrop-blur-[2px]">
-                            <button onClick={onSetMain} className={`p-2 rounded-full transition-colors shadow-lg ${isMain ? 'bg-amber-400 text-white' : 'bg-white text-gray-400 hover:text-amber-400 hover:bg-amber-50'}`} title="設為主圖 (Main/Tab)">
+                            <button onClick={onSetMain} className={`keep-light p-2 rounded-full transition-colors shadow-lg ${isMain ? 'bg-amber-400 text-white' : 'bg-white text-gray-400 hover:text-amber-400 hover:bg-amber-50'}`} title="設為主圖 (Main/Tab)">
                                 <StarIcon filled={isMain} />
                             </button>
 
-                            <button onClick={onEdit} className="p-2 bg-white text-gray-800 rounded-full hover:bg-purple-50 hover:text-purple-600 transition-colors shadow-lg" title="魔法修復">
+                            <button onClick={onEdit} className="keep-light p-2 bg-white text-gray-800 rounded-full hover:bg-purple-50 hover:text-purple-600 transition-colors shadow-lg" title="魔法修復">
                                 <MagicWandIcon />
                             </button>
 
-                            <button onClick={onDownload} className="p-2 bg-white text-gray-800 rounded-full hover:bg-green-50 hover:text-green-600 transition-colors shadow-lg" title="下載">
+                            <button onClick={onDownload} className="keep-light p-2 bg-white text-gray-800 rounded-full hover:bg-green-50 hover:text-green-600 transition-colors shadow-lg" title="下載">
                                 <DownloadIcon />
                             </button>
                         </div>
@@ -172,7 +173,7 @@ const TextToggle = ({ enabled, onChange }: { enabled: boolean, onChange: (val: b
             onClick={() => onChange(!enabled)}
         >
             {/* Knob */}
-            <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 flex items-center justify-center text-[10px] font-bold text-slate-600
+            <div className={`keep-light absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 flex items-center justify-center text-[10px] font-bold text-slate-600
                 ${enabled ? 'left-9' : 'left-1'}`}
             >
             </div>
@@ -428,6 +429,13 @@ export const App = () => {
     // Product Type State (Sticker vs Emoji)
     const [stickerType, setStickerType] = useState<StickerType>('STATIC');
 
+    // Generation Quality Mode (Pro vs Flash image model)
+    const [genQuality, setGenQuality] = useState<QualityMode>(getQualityMode());
+    const handleQualityChange = (mode: QualityMode) => {
+        setGenQuality(mode);
+        setQualityMode(mode);
+    };
+
     const [fontConfig, setFontConfig] = useState<FontConfig>({
         language: LANGUAGES[0],
         style: FONT_STYLES[1],
@@ -473,10 +481,17 @@ export const App = () => {
     const sheetInputRef = useRef<HTMLInputElement>(null);
 
     const [hasKey, setHasKey] = useState(false);
+    const [googleProfile, setGoogleProfile] = useState<GoogleProfile | null>(() => loadGoogleProfile());
 
     const setKeyAndStart = (key: string) => {
         setApiKey(key);
+        setGoogleProfile(loadGoogleProfile());
         setHasKey(true);
+    };
+
+    const handleSignOut = () => {
+        clearGoogleProfile();
+        setGoogleProfile(null);
     };
 
     // Security update: No auto-loading of keys.
@@ -1112,7 +1127,18 @@ export const App = () => {
                         </h1>
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                    {googleProfile && (
+                        <div className={`hidden sm:flex items-center gap-2 pl-1 pr-2 py-1 rounded-full ${theme === 'dark' ? 'bg-white/10 border border-white/10' : 'bg-slate-100'}`}>
+                            <img src={googleProfile.picture} alt={googleProfile.name} referrerPolicy="no-referrer" className="w-7 h-7 rounded-full" title={`${t('signedInAs')}: ${googleProfile.email}`} />
+                            <button
+                                onClick={handleSignOut}
+                                className={`text-[10px] font-bold ${theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-400 hover:text-slate-600'}`}
+                            >
+                                {t('signOut')}
+                            </button>
+                        </div>
+                    )}
                     <button
                         onClick={toggleTheme}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20 border border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'}`}
@@ -1177,6 +1203,27 @@ export const App = () => {
                                         {t('emojiNote')}
                                     </div>
                                 )}
+
+                                {/* GENERATION QUALITY / COST SWITCHER */}
+                                <div className="flex flex-col items-center gap-2 mb-4">
+                                    <div className={`p-1 rounded-xl flex gap-1 text-xs ${theme === 'dark' ? 'bg-black/40 border border-white/10' : 'bg-slate-200'}`}>
+                                        <button
+                                            onClick={() => handleQualityChange('QUALITY')}
+                                            className={`px-4 py-1.5 rounded-lg font-bold transition-all ${genQuality === 'QUALITY' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-indigo-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
+                                        >
+                                            💎 {t('qualityPro')}
+                                        </button>
+                                        <button
+                                            onClick={() => handleQualityChange('ECONOMY')}
+                                            className={`px-4 py-1.5 rounded-lg font-bold transition-all ${genQuality === 'ECONOMY' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-emerald-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
+                                        >
+                                            🪙 {t('qualityEco')}
+                                        </button>
+                                    </div>
+                                    <p className={`text-[11px] max-w-lg text-center ${theme === 'dark' ? 'text-indigo-300/70' : 'text-slate-400'}`}>
+                                        {genQuality === 'QUALITY' ? t('qualityProHint') : t('qualityEcoHint')}
+                                    </p>
+                                </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-12">
                                     <div onClick={() => { setInputMode('PHOTO'); setCharCount(1); }} className={`cursor-pointer p-8 rounded-3xl border-2 hover:-translate-y-1 transition-all group ${theme === 'dark' ? 'bg-white/10 border-white/10 hover:border-indigo-400 hover:bg-white/15 backdrop-blur-md shadow-lg ring-1 ring-white/5' : 'bg-white border-white hover:border-indigo-500 hover:shadow-xl'}`}>
@@ -1587,7 +1634,7 @@ export const App = () => {
                                 {/* Fixed Height Container to prevent full-screen takeover */}
                                 <div className="w-full h-[50vh] flex items-center justify-center bg-gray-50 rounded-2xl relative group border border-slate-100 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgBDAm9BGDWAAJyRCgLaBCAAgXwixzAS0pgAAAABJRU5ErkJggg==')]">
                                     <img src={generatedChar.url} alt="Character" className="h-full w-full object-contain shadow-lg" />
-                                    <button onClick={handleGenerateCharacter} className="absolute top-4 right-4 bg-white/90 backdrop-blur text-slate-700 px-4 py-2 rounded-full font-bold shadow-md hover:bg-white hover:text-indigo-600 transition-all flex items-center gap-2">
+                                    <button onClick={handleGenerateCharacter} className="keep-light absolute top-4 right-4 bg-white/90 backdrop-blur text-slate-700 px-4 py-2 rounded-full font-bold shadow-md hover:bg-white hover:text-indigo-600 transition-all flex items-center gap-2">
                                         <RefreshIcon /> {t('retryGenerate')}
                                     </button>
                                 </div>

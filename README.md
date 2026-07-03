@@ -23,6 +23,39 @@ npm install
 - 預設 Key 僅保留於本次連線（記憶體），重新整理後需重新輸入。
 - 勾選「記住 API Key」後，Key 會以 Base64 形式儲存在瀏覽器的 `localStorage`，僅存於您的裝置，不會上傳至任何伺服器。
 
+### 2.5 生成品質 / 成本模式
+主畫面提供兩種生圖模式（可隨時切換，設定會記住）：
+
+| 模式 | 使用模型 | 特性 | 約略成本 |
+|------|---------|------|---------|
+| 💎 高品質 | `gemini-3-pro-image-preview` | 網格/版面遵循度最佳，支援 2K/4K | ~$0.13–0.24 / 張大圖 |
+| 🪙 經濟 | `gemini-2.5-flash-image` | 便宜 3~6 倍，1024px，適合 8–16 張小套組 | ~$0.04 / 張大圖 |
+
+高品質模式生成失敗時會自動降級改用經濟模型重試。模型 ID 可用環境變數覆寫（因 preview 模型可能更版）：
+
+```bash
+# .env.local（皆為選填）
+VITE_IMAGE_MODEL_PRO=gemini-3-pro-image-preview
+VITE_IMAGE_MODEL_FLASH=gemini-2.5-flash-image
+VITE_TEXT_MODEL=gemini-2.5-flash
+```
+
+### 2.6 Google 帳號登入（選用）
+可讓使用者以 Google 帳號登入（顯示頭像與名稱、個人化體驗）。注意：登入不能取代 Gemini API Key，Key 仍需自行提供。
+
+設定步驟：
+1. 前往 [Google Cloud Console → API 和服務 → 憑證](https://console.cloud.google.com/apis/credentials)。
+2. 建立「OAuth 2.0 用戶端 ID」，應用程式類型選「網頁應用程式」。
+3. 在「已授權的 JavaScript 來源」加入您的網域（例如 `http://localhost:3000` 與 GitHub Pages 網址）。
+4. 將取得的 Client ID 設定為環境變數：
+
+```bash
+# .env.local
+VITE_GOOGLE_CLIENT_ID=你的-client-id.apps.googleusercontent.com
+```
+
+未設定時，登入按鈕會自動隱藏，功能不受影響。GitHub Actions 部署時請將其加入 Repository Secrets 並在 workflow 傳入。
+
 ### 3. 啟動開發伺服器
 ```bash
 npm run dev

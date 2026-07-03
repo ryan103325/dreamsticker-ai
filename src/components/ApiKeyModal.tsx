@@ -131,7 +131,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
                                     )}
 
                                     {activeStep === 3 && (
-                                        <div className="w-full max-w-sm bg-white p-4 rounded-lg border border-gray-200 shadow-lg text-black text-center">
+                                        <div className="keep-light w-full max-w-sm bg-white p-4 rounded-lg border border-gray-200 shadow-lg text-black text-center">
                                             <div className="font-bold text-lg mb-2">Enable Billing</div>
                                             <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-3 text-sm text-blue-800">
                                                 Link a billing account to upgrade from Free Tier to Pay-as-you-go.
