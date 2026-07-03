@@ -386,7 +386,7 @@ export const generateIPCharacter = async (sourceImageDataUrl: string, style: str
         validateResponse(response);
         const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (!part?.inlineData?.data) throw new Error("No image data.");
-        return { id: `char - ${Date.now()} `, url: `data: image / png; base64, ${part.inlineData.data} `, type: 'STATIC' };
+        return { id: `char-${Date.now()}`, url: `data:image/png;base64,${part.inlineData.data}`, type: 'STATIC' };
     });
 };
 
@@ -593,8 +593,8 @@ export const generateGroupCharacterSheet = async (
         if (!part?.inlineData?.data) throw new Error("No image data.");
 
         return {
-            id: `group - ${Date.now()} `,
-            url: `data: image / png; base64, ${part.inlineData.data} `,
+            id: `group-${Date.now()}`,
+            url: `data:image/png;base64,${part.inlineData.data}`,
             type: 'STATIC'
         };
     });
@@ -704,7 +704,7 @@ Spacing: Ensure > 3 % green gap between all stickers(Vertical & Horizontal).
             validateResponse(response);
             const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
             if (!part?.inlineData?.data) throw new Error("No data");
-            const finalUrl = `data: image / png; base64, ${part.inlineData.data} `;
+            const finalUrl = `data:image/png;base64,${part.inlineData.data}`;
 
             // Level 1 Check
             const valid = await validateImageDimensions(finalUrl, targetRatio);
@@ -748,7 +748,7 @@ export const editSticker = async (markedImage: string, prompt: string): Promise<
         validateResponse(response);
         const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (!part?.inlineData?.data) throw new Error("No data");
-        return { id: `edited - ${Date.now()} `, url: `data: image / png; base64, ${part.inlineData.data} `, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
+        return { id: `edited-${Date.now()}`, url: `data:image/png;base64,${part.inlineData.data}`, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
     } catch (e) {
         const response = await ai.models.generateContent({
             model: STICKER_GEN_MODEL_FLASH,
@@ -758,7 +758,7 @@ export const editSticker = async (markedImage: string, prompt: string): Promise<
         validateResponse(response);
         const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (!part?.inlineData?.data) throw new Error("Edit failed.");
-        return { id: `edited - ${Date.now()} `, url: `data: image / png; base64, ${part.inlineData.data} `, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
+        return { id: `edited-${Date.now()}`, url: `data:image/png;base64,${part.inlineData.data}`, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
     }
 };
 
@@ -775,7 +775,7 @@ export const restyleSticker = async (imageUrl: string, filter: ArtisticFilterTyp
     validateResponse(response);
     const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
     if (!part?.inlineData?.data) throw new Error("Restyle failed.");
-    return { id: `restyle - ${Date.now()} `, url: `data: image / png; base64, ${part.inlineData.data} `, type: 'STATIC', status: 'SUCCESS', emotion: filter };
+    return { id: `restyle-${Date.now()}`, url: `data:image/png;base64,${part.inlineData.data}`, type: 'STATIC', status: 'SUCCESS', emotion: filter };
 };
 
 /**
@@ -867,7 +867,7 @@ export const generateSimpleIcons = async (
     1. Output strictly a comma-separated list of keywords.
     2. No numbering, no bullet points, no extra text.
     3. Language: Traditional Chinese (繁體中文).
-    4. Example output: 開心, 難過, 生氣, 驚安, 困惑, 睡覺, ...
+    4. Example output: 開心, 難過, 生氣, 驚訝, 困惑, 睡覺, ...
     `;
 
     const response = await ai.models.generateContent({

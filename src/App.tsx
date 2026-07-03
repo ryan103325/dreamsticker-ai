@@ -11,21 +11,19 @@ import {
     FontConfig,
     LANGUAGES,
     FONT_STYLES,
-    GenerationStatus,
     StickerQuantity,
-    StickerSheet,
     generateDefaultConfigs,
     SheetLayout,
     getStickerSpec,
+    getEmojiSpec,
     StickerPackageInfo,
     STICKER_SPECS,
     EMOJI_SPECS,
     CharacterInput
 } from './types';
 import { useLanguage } from './LanguageContext';
-import { generateIPCharacter, generateStickerSheet, editSticker, parseStickerIdeas, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish, generateStickerPlan, parseStructuredStickerPlan, analyzeImageSubject, generateSimpleIcons } from './services/geminiService';
-import { loadApiKey, clearApiKey } from './services/storageUtils';
-import { generateFrameZip, wait, resizeImage, extractDominantColors, blobToDataUrl, getFontFamily, processGreenScreenImage, generateTabImage } from './services/utils';
+import { generateIPCharacter, generateStickerSheet, editSticker, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish, generateStickerPlan, parseStructuredStickerPlan, analyzeImageSubject, generateSimpleIcons } from './services/geminiService';
+import { generateFrameZip, resizeImage, extractDominantColors, processGreenScreenImage, generateTabImage } from './services/utils';
 import { processGreenScreenAndSlice, waitForOpenCV } from './services/opencvService';
 import { Loader } from './components/Loader';
 import { MagicEditor } from './components/MagicEditor';
@@ -48,18 +46,6 @@ const ART_STYLES = [
     'artStyle_minimal',
     'artStyle_pixel',
     'artStyle_ghibli'
-];
-
-// Predefined Font Options for Quick Selection
-const FONT_OPTIONS = [
-    "華康布丁體",
-    "思源黑體",
-    "俐方體",
-    "粉圓體",
-    "華康少女文字",
-    "懶狗狗體",
-    "激燃體",
-    "M+字體"
 ];
 
 const CopyBtn = ({ text, label = "複製", successLabel = "已複製" }: { text: string, label?: string, successLabel?: string }) => {
@@ -119,7 +105,7 @@ const StickerCard: React.FC<StickerCardProps> = ({
                 </div>
             )}
 
-            <div className="aspect-square p-4 flex items-center justify-center bg-gray-[50] relative bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgBDAm9BGDWAAJyRCgLaBCAAgXwixzAS0pgAAAABJRU5ErkJggg==')]">
+            <div className="aspect-square p-4 flex items-center justify-center bg-gray-50 relative bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgBDAm9BGDWAAJyRCgLaBCAAgXwixzAS0pgAAAABJRU5ErkJggg==')]">
                 {sticker.status === 'PENDING' && (
                     <div className="flex flex-col items-center justify-center text-gray-400">
                         <span className="text-3xl mb-2 opacity-20">⏳</span>
@@ -187,16 +173,16 @@ const TextToggle = ({ enabled, onChange }: { enabled: boolean, onChange: (val: b
         >
             {/* Knob */}
             <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 flex items-center justify-center text-[10px] font-bold text-slate-600
-                ${enabled ? 'left-1' : 'left-9'}`}
+                ${enabled ? 'left-9' : 'left-1'}`}
             >
             </div>
             {/* Label inside track */}
             <span className={`absolute top-1/2 -translate-y-1/2 text-[10px] font-black text-white transition-opacity duration-300
-                ${enabled ? 'right-2 opacity-100' : 'right-2 opacity-0'}`}>
+                ${enabled ? 'left-2 opacity-100' : 'left-2 opacity-0'}`}>
                 ON
             </span>
             <span className={`absolute top-1/2 -translate-y-1/2 text-[10px] font-black text-white transition-opacity duration-300
-                ${enabled ? 'left-2 opacity-0' : 'left-2 opacity-100'}`}>
+                ${enabled ? 'right-2 opacity-0' : 'right-2 opacity-100'}`}>
                 OFF
             </span>
         </div>
@@ -447,8 +433,6 @@ export const App = () => {
         style: FONT_STYLES[1],
         color: "#000000"
     });
-    const [customFont, setCustomFont] = useState<string>("");
-
     // No Text Mode
     const [includeText, setIncludeText] = useState(true);
 
@@ -520,6 +504,7 @@ export const App = () => {
         } else if (appStep === AppStep.STICKER_PROCESSING) {
             setAppStep(AppStep.SHEET_EDITOR);
             setFinalStickers([]);
+            setStickerPackageInfo(null);
         }
     };
 
@@ -848,7 +833,7 @@ export const App = () => {
             let stickersPerSheet: number = stickerQuantity;
             let layout: SheetLayout;
 
-            const spec = getStickerSpec(stickerQuantity);
+            const spec = stickerType === 'EMOJI' ? getEmojiSpec(stickerQuantity) : getStickerSpec(stickerQuantity);
             layout = { rows: spec.rows, cols: spec.cols, width: spec.width, height: spec.height };
 
             const batches = [];
@@ -899,9 +884,7 @@ export const App = () => {
 
         try {
             let allSlicedImages: string[] = [];
-            const targetW = 370;
-            const targetH = 320;
-            const spec = getStickerSpec(stickerQuantity);
+            const spec = stickerType === 'EMOJI' ? getEmojiSpec(stickerQuantity) : getStickerSpec(stickerQuantity);
             const rows = spec.rows;
             const cols = spec.cols;
 
@@ -989,8 +972,6 @@ export const App = () => {
             console.error('Failed to copy: ', err);
         });
     };
-
-    const currentSpec = STICKER_SPECS[stickerQuantity] || STICKER_SPECS[8];
 
     const handleFormatTextList = () => {
         if (!promptTextListInput.trim()) return;
@@ -1083,7 +1064,7 @@ export const App = () => {
             "邊框設計：文字與角色外圍皆需具備「細薄黑邊內層」，外層包覆「厚度適中的圓滑白色外框」。\n",
             "字型風格：【", vFont, "】\n\n",
             "[文字色彩]\n",
-            "絕對禁止使用錄色、螢光綠、黃綠色等接近背景綠幕的顏色，以免去背失效。絕對禁止黑色。\n\n",
+            "絕對禁止使用綠色、螢光綠、黃綠色等接近背景綠幕的顏色，以免去背失效。絕對禁止黑色。\n\n",
             "[表情與動作設計]\n",
             "表情參考：【喜、怒、哀、樂、驚訝、無語...】\n",
             "畫風設定：【", vArt, "】。\n\n",
@@ -1113,7 +1094,7 @@ export const App = () => {
 
 
     if (!hasKey) {
-        return <LandingPage onStart={setKeyAndStart} lang={sysLang} setLang={setSysLang} />;
+        return <LandingPage onStart={setKeyAndStart} />;
     }
 
     return (
@@ -1434,7 +1415,7 @@ export const App = () => {
                                                         className="w-full p-4 rounded-2xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-pink-500 outline-none font-medium text-lg min-h-[200px]"
                                                         placeholder={t('charDescPlaceholder')}
                                                     />
-                                                    <div className="absolute bottom-4 right-4 relative">
+                                                    <div className="absolute bottom-4 right-4">
                                                         <button
                                                             onClick={() => setShowDiceMenu(!showDiceMenu)}
                                                             disabled={diceLoading}
@@ -1532,7 +1513,7 @@ export const App = () => {
                                                                         />
                                                                         <span className="text-indigo-600 font-black text-xl w-12 text-right">{promptGenQuantity}</span>
                                                                     </div>
-                                                                    <p className="text-[10px] text-slate-400 mt-1">{t('promptGenGrid')}: {STICKER_SPECS[promptGenQuantity]?.cols}x{STICKER_SPECS[promptGenQuantity]?.rows} ({STICKER_SPECS[promptGenQuantity]?.width}x{STICKER_SPECS[promptGenQuantity]?.height}px)</p>
+                                                                    <p className="text-[10px] text-slate-400 mt-1">{t('promptGenGrid')}: {promptSpec.cols}x{promptSpec.rows} ({promptSpec.width}x{promptSpec.height}px)</p>
                                                                 </div>
                                                                 <div>
                                                                     <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('promptGenStyle')}</label>

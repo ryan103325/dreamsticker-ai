@@ -18,17 +18,10 @@
 npm install
 ```
 
-### 2. 設定 Environment Variables (可選)
-本專案支援兩種 API Key 輸入方式：
-1. **介面輸入 (推薦)**：直接啟動網頁，在首頁 Landing Page 輸入您的 Gemini API Key。Key 會儲存在瀏覽器的 `localStorage` 中，不會上傳至伺服器。
-2. **環境變數 (開發用)**：您也可以在專案根目錄建立 `.env.local` 檔案來預設 Key：
-
-```bash
-# .env.local
-VITE_GEMINI_API_KEY=你的_Google_Gemini_API_Key
-```
-
-**注意**：此專案的 `.gitignore` 已設定忽略 `.env` 相關檔案。
+### 2. 設定 API Key
+直接啟動網頁，在首頁 Landing Page 輸入您的 Gemini API Key。
+- 預設 Key 僅保留於本次連線（記憶體），重新整理後需重新輸入。
+- 勾選「記住 API Key」後，Key 會以 Base64 形式儲存在瀏覽器的 `localStorage`，僅存於您的裝置，不會上傳至任何伺服器。
 
 ### 3. 啟動開發伺服器
 ```bash
@@ -37,7 +30,8 @@ npm run dev
 
 ### 4. 建置生產版本
 ```bash
-npm run build
+npm run typecheck   # TypeScript 型別檢查
+npm run build       # 產出 dist/
 ```
 
 ## 部署 (Deployment)

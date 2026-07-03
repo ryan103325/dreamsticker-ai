@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../LanguageContext';
-import { loadApiKey } from '../services/storageUtils';
+import { loadApiKey, saveApiKey, clearApiKey } from '../services/storageUtils';
 import { MagicWandIcon } from './Icons';
 
 import { ApiKeyModal } from './ApiKeyModal';
@@ -12,6 +12,7 @@ interface LandingPageProps {
 export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
     const { language, setLanguage: setSysLang, t } = useLanguage();
     const [key, setKey] = useState("");
+    const [remember, setRemember] = useState(false);
     const [showGuideModal, setShowGuideModal] = useState(false);
 
     const toggleLang = () => {
@@ -20,13 +21,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
 
     useEffect(() => {
         const stored = loadApiKey();
-        if (stored) setKey(stored);
+        if (stored) {
+            setKey(stored);
+            setRemember(true);
+        }
     }, []);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (key.trim().length > 10) {
-            onStart(key.trim());
+        const trimmed = key.trim();
+        if (trimmed.length > 10) {
+            if (remember) {
+                saveApiKey(trimmed);
+            } else {
+                clearApiKey();
+            }
+            onStart(trimmed);
         } else {
             alert(t('invalidKey'));
         }
@@ -72,6 +82,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
                             className="w-full px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all"
                         />
                     </div>
+
+                    <label className="flex items-center gap-2 text-xs text-indigo-200 cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={remember}
+                            onChange={(e) => setRemember(e.target.checked)}
+                            className="w-4 h-4 rounded accent-indigo-500"
+                        />
+                        {t('rememberKey')}
+                    </label>
 
                     <button
                         type="submit"
