@@ -285,6 +285,11 @@ export const translations = {
         genModeSingleHint: "每張獨立生成（自動鎖定經濟模型）：約 $0.07/張，40 張約 $2.7，比底圖模式貴 10 倍以上。建議先用底圖模式，只對失敗的貼圖按「重試」單張重生（重試就是走這條便宜的單張路徑）。",
         costEstimate: "預估成本",
 
+        // Work persistence
+        resumeWorkTitle: "發現上次完成的作品",
+        resumeWork: "繼續編輯",
+        discardWork: "捨棄",
+
         // Upload / Input Step
         changeImage: "更換圖片",
         designing: "設計中...",
@@ -617,6 +622,11 @@ export const translations = {
         genModeSheetHint: "One big grid image, auto-sliced: ~$0.10-0.24 per whole set. Cheapest (recommended); layout occasionally drifts.",
         genModeSingleHint: "Each sticker generated independently (pinned to the economy model): ~$0.07 each, ~$2.7 for 40 - over 10x the sheet cost. Tip: use Grid Sheet first, then hit Retry on failed stickers only (retry uses this cheap single-sticker path).",
         costEstimate: "Est. cost",
+
+        // Work persistence
+        resumeWorkTitle: "Your last finished work is here",
+        resumeWork: "Resume",
+        discardWork: "Discard",
 
         // Upload / Input Step
         changeImage: "Change Image",

@@ -1,6 +1,41 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
+/* ------------------------------------------------------------------------
+   Brand palette: "Sticker Warm" (cute consumer look).
+   The app was written with indigo as primary and purple as secondary; we
+   remap those two scales globally so every existing utility class stays
+   put while the whole product shifts to a coherent coral + apricot brand.
+   Swap these values to re-skin the entire app.
+   ------------------------------------------------------------------------ */
+@theme {
+  /* Primary: Coral */
+  --color-indigo-50: #FFF4F0;
+  --color-indigo-100: #FFE5DC;
+  --color-indigo-200: #FFCDBC;
+  --color-indigo-300: #FFAA8F;
+  --color-indigo-400: #FF8261;
+  --color-indigo-500: #F96A47;
+  --color-indigo-600: #E9502D;
+  --color-indigo-700: #C33F20;
+  --color-indigo-800: #9D341D;
+  --color-indigo-900: #6E2A1B;
+  --color-indigo-950: #44150B;
+
+  /* Secondary: Apricot */
+  --color-purple-50: #FFF8EC;
+  --color-purple-100: #FFEECC;
+  --color-purple-200: #FFDD99;
+  --color-purple-300: #FFC663;
+  --color-purple-400: #FFAC38;
+  --color-purple-500: #FB921A;
+  --color-purple-600: #E67510;
+  --color-purple-700: #BF5B0F;
+  --color-purple-800: #984814;
+  --color-purple-900: #6B3A12;
+  --color-purple-950: #421D07;
+}
+
 :root {
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
@@ -58,17 +93,17 @@
   &.bg-slate-50, &.bg-gray-50 { background-color: #0f172a; } /* slate-900 */
   &.bg-slate-50\/50 { background-color: color-mix(in oklab, #0f172a 55%, transparent); }
   &.bg-slate-100, &.bg-slate-200, &.bg-gray-100 { background-color: #334155; } /* slate-700 */
-  &.bg-indigo-50, &.bg-indigo-100 { background-color: color-mix(in oklab, #6366f1 16%, transparent); }
-  &.bg-indigo-50\/50, &.bg-indigo-50\/30 { background-color: color-mix(in oklab, #6366f1 10%, transparent); }
-  &.bg-purple-100, &.bg-purple-50 { background-color: color-mix(in oklab, #a855f7 18%, transparent); }
+  &.bg-indigo-50, &.bg-indigo-100 { background-color: color-mix(in oklab, var(--color-indigo-500) 16%, transparent); }
+  &.bg-indigo-50\/50, &.bg-indigo-50\/30 { background-color: color-mix(in oklab, var(--color-indigo-500) 10%, transparent); }
+  &.bg-purple-100, &.bg-purple-50 { background-color: color-mix(in oklab, var(--color-purple-500) 18%, transparent); }
   &.bg-pink-100, &.bg-pink-50 { background-color: color-mix(in oklab, #ec4899 18%, transparent); }
   &.bg-amber-100, &.bg-amber-50 { background-color: color-mix(in oklab, #f59e0b 18%, transparent); }
   &.bg-green-100, &.bg-green-50 { background-color: color-mix(in oklab, #22c55e 18%, transparent); }
   &.bg-red-100, &.bg-red-50 { background-color: color-mix(in oklab, #ef4444 18%, transparent); }
 
   /* Gradient panels */
-  &.from-indigo-50 { --tw-gradient-from: color-mix(in oklab, #6366f1 14%, #1e293b); }
-  &.to-indigo-50 { --tw-gradient-to: color-mix(in oklab, #6366f1 14%, #1e293b); }
+  &.from-indigo-50 { --tw-gradient-from: color-mix(in oklab, var(--color-indigo-500) 14%, #1e293b); }
+  &.to-indigo-50 { --tw-gradient-to: color-mix(in oklab, var(--color-indigo-500) 14%, #1e293b); }
   &.from-white { --tw-gradient-from: #1e293b; }
   &.to-white { --tw-gradient-to: #1e293b; }
 
@@ -76,8 +111,8 @@
   &.text-slate-800, &.text-slate-700, &.text-gray-800 { color: #f1f5f9; }   /* slate-100 */
   &.text-slate-600, &.text-slate-500, &.text-gray-600, &.text-gray-500 { color: #cbd5e1; } /* slate-300 */
   &.text-slate-400 { color: #94a3b8; }
-  &.text-indigo-600, &.text-indigo-700, &.text-indigo-900, &.text-indigo-500 { color: #a5b4fc; } /* indigo-300 */
-  &.text-purple-600, &.text-purple-700 { color: #d8b4fe; }
+  &.text-indigo-600, &.text-indigo-700, &.text-indigo-900, &.text-indigo-500 { color: var(--color-indigo-300); } /* indigo-300 */
+  &.text-purple-600, &.text-purple-700 { color: var(--color-purple-300); }
   &.text-pink-600, &.text-pink-700 { color: #f9a8d4; }
   &.text-green-700 { color: #86efac; }
   &.text-red-700 { color: #fca5a5; }
@@ -87,8 +122,8 @@
   &.border-slate-100, &.border-slate-200, &.border-slate-300,
   &.border-gray-100, &.border-gray-200 { border-color: #334155; } /* slate-700 */
   &.border-indigo-50, &.border-indigo-100, &.border-indigo-200,
-  &.border-indigo-100\/50 { border-color: color-mix(in oklab, #6366f1 35%, transparent); }
-  &.border-purple-100 { border-color: color-mix(in oklab, #a855f7 35%, transparent); }
+  &.border-indigo-100\/50 { border-color: color-mix(in oklab, var(--color-indigo-500) 35%, transparent); }
+  &.border-purple-100 { border-color: color-mix(in oklab, var(--color-purple-500) 35%, transparent); }
   &.border-pink-100 { border-color: color-mix(in oklab, #ec4899 35%, transparent); }
   &.border-amber-200 { border-color: color-mix(in oklab, #f59e0b 35%, transparent); }
   &.border-red-200 { border-color: color-mix(in oklab, #ef4444 35%, transparent); }
@@ -96,16 +131,16 @@
 
   /* Hover states */
   &.hover\:bg-slate-50:hover, &.hover\:bg-slate-100:hover, &.hover\:bg-white:hover { background-color: #334155; }
-  &.hover\:bg-indigo-50:hover, &.hover\:bg-indigo-100:hover { background-color: color-mix(in oklab, #6366f1 24%, transparent); }
-  &.hover\:bg-indigo-200:hover { background-color: color-mix(in oklab, #6366f1 32%, transparent); }
-  &.hover\:bg-purple-50:hover { background-color: color-mix(in oklab, #a855f7 24%, transparent); }
-  &.hover\:bg-purple-200:hover { background-color: color-mix(in oklab, #a855f7 32%, transparent); }
+  &.hover\:bg-indigo-50:hover, &.hover\:bg-indigo-100:hover { background-color: color-mix(in oklab, var(--color-indigo-500) 24%, transparent); }
+  &.hover\:bg-indigo-200:hover { background-color: color-mix(in oklab, var(--color-indigo-500) 32%, transparent); }
+  &.hover\:bg-purple-50:hover { background-color: color-mix(in oklab, var(--color-purple-500) 24%, transparent); }
+  &.hover\:bg-purple-200:hover { background-color: color-mix(in oklab, var(--color-purple-500) 32%, transparent); }
   &.hover\:bg-pink-50:hover { background-color: color-mix(in oklab, #ec4899 24%, transparent); }
   &.hover\:bg-pink-200:hover { background-color: color-mix(in oklab, #ec4899 32%, transparent); }
   &.hover\:bg-green-50:hover { background-color: color-mix(in oklab, #22c55e 24%, transparent); }
   &.hover\:bg-amber-50:hover { background-color: color-mix(in oklab, #f59e0b 24%, transparent); }
   &.hover\:bg-red-200:hover { background-color: color-mix(in oklab, #ef4444 32%, transparent); }
   &.hover\:text-slate-700:hover, &.hover\:text-slate-600:hover { color: #f1f5f9; }
-  &.hover\:text-indigo-600:hover, &.hover\:text-indigo-700:hover, &.hover\:text-indigo-800:hover { color: #c7d2fe; }
+  &.hover\:text-indigo-600:hover, &.hover\:text-indigo-700:hover, &.hover\:text-indigo-800:hover { color: var(--color-indigo-200); }
   &.hover\:text-pink-600:hover, &.hover\:text-pink-700:hover { color: #fbcfe8; }
 }

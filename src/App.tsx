@@ -35,6 +35,8 @@ import { UploadIcon, MagicWandIcon, StickerIcon, DownloadIcon, RefreshIcon, Edit
 import { LandingPage } from './components/LandingPage';
 import { setApiKey } from './services/geminiService';
 import { loadGoogleProfile, clearGoogleProfile, GoogleProfile } from './services/googleAuth';
+import { useToast } from './components/Toast';
+import { saveWork, loadWork, clearWork, SavedWork } from './services/persistence';
 
 // Add new step for Smart Crop Preview
 const SHEET_EDITOR_STEP = AppStep.SHEET_EDITOR;
@@ -167,6 +169,31 @@ const StickerCard: React.FC<StickerCardProps> = ({
     );
 };
 
+// Flow progress indicator shown under the navbar
+const Stepper = ({ current, labels, isDark }: { current: number; labels: string[]; isDark: boolean }) => (
+    <div className="flex items-center justify-center gap-0 mt-6 px-4 select-none" aria-label="progress">
+        {labels.map((label, i) => (
+            <React.Fragment key={label}>
+                {i > 0 && (
+                    <div className={`h-0.5 w-6 sm:w-12 rounded transition-colors ${i <= current ? 'bg-indigo-500' : (isDark ? 'bg-white/15' : 'bg-slate-200')}`}></div>
+                )}
+                <div className="flex items-center gap-2">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black transition-all
+                        ${i < current ? 'bg-indigo-500 text-white' :
+                            i === current ? (isDark ? 'bg-indigo-400 text-white ring-4 ring-indigo-400/20' : 'bg-indigo-600 text-white ring-4 ring-indigo-100') :
+                                (isDark ? 'bg-white/10 text-white/40' : 'bg-slate-100 text-slate-400')}`}>
+                        {i < current ? '✓' : i + 1}
+                    </div>
+                    <span className={`text-xs font-bold hidden md:inline transition-colors
+                        ${i === current ? (isDark ? 'text-white' : 'text-slate-800') : (isDark ? 'text-white/40' : 'text-slate-400')}`}>
+                        {label}
+                    </span>
+                </div>
+            </React.Fragment>
+        ))}
+    </div>
+);
+
 // Custom Text Toggle Component
 const TextToggle = ({ enabled, onChange }: { enabled: boolean, onChange: (val: boolean) => void }) => (
     <div className="flex items-center gap-3 p-2 bg-indigo-50/50 rounded-xl border border-indigo-100/50">
@@ -195,6 +222,7 @@ const TextToggle = ({ enabled, onChange }: { enabled: boolean, onChange: (val: b
 
 // External Prompt Generator Component
 const ExternalPromptGenerator = ({ onApply, isProcessing, characterType }: { onApply: (text: string) => void, isProcessing: boolean, characterType: string }) => {
+    const toast = useToast();
     const [isOpen, setIsOpen] = useState(false);
     const [qty, setQty] = useState(8);
     const [category, setCategory] = useState("綜合"); // Default to Mixed
@@ -215,10 +243,10 @@ const ExternalPromptGenerator = ({ onApply, isProcessing, characterType }: { onA
             const plan = await generateStickerPlan(qty, finalCategory, characterType);
             if (plan) {
                 onApply(plan);
-                alert("文案已生成並填入！請點擊上方「分析並自動填入」來套用設定。");
+                toast("文案已生成並填入！請點擊上方「分析並自動填入」來套用設定。", 'success');
             }
         } catch (e) {
-            alert("生成失敗，請稍後再試。");
+            toast("生成失敗，請稍後再試。", 'error');
             console.error(e);
         } finally {
             setIsGeneratingPlan(false);
@@ -316,13 +344,14 @@ const ExternalPromptGenerator = ({ onApply, isProcessing, characterType }: { onA
 };
 
 const SimpleIconGenerator = ({ onApply }: { onApply: (text: string) => void }) => {
+    const toast = useToast();
     const [isOpen, setIsOpen] = useState(false);
     const [qty, setQty] = useState(8);
     const [topic, setTopic] = useState("");
     const [isGenerating, setIsGenerating] = useState(false);
 
     const handleGenerate = async () => {
-        if (!topic.trim()) return alert("請輸入主題 (Topic)");
+        if (!topic.trim()) return toast("請輸入主題 (Topic)", 'error');
         setIsGenerating(true);
         try {
             const list = await generateSimpleIcons(qty, topic);
@@ -331,7 +360,7 @@ const SimpleIconGenerator = ({ onApply }: { onApply: (text: string) => void }) =
             }
         } catch (e) {
             console.error(e);
-            alert("文案生成失敗");
+            toast("文案生成失敗", 'error');
         } finally {
             setIsGenerating(false);
         }
@@ -396,6 +425,7 @@ export const App = () => {
     // const [apiKeyReady, setApiKeyReady] = useState(false); // Removed
     const { language: sysLang, setLanguage: setSysLang, t } = useLanguage();
     const { theme, toggleTheme } = useTheme();
+    const toast = useToast();
 
     // const [sysLang, setSysLang] = useState<LanguageCode>('zh'); // System UI Language
     // const t = translations[sysLang]; // I18n Helper
@@ -547,6 +577,47 @@ export const App = () => {
         waitForOpenCV().then(ready => setIsOpenCVReady(ready));
     }, []);
 
+    // 3. Work persistence: offer to restore the last finished set, and keep
+    // the current one saved so a refresh doesn't destroy the output.
+    const [savedWork, setSavedWork] = useState<SavedWork | null>(null);
+    useEffect(() => {
+        loadWork().then(w => {
+            if (w && w.finalStickers.some(s => s.status === 'SUCCESS')) setSavedWork(w);
+        });
+    }, []);
+
+    useEffect(() => {
+        if (appStep === AppStep.STICKER_PROCESSING) {
+            const done = finalStickers.filter(s => s.status === 'SUCCESS');
+            if (done.length > 0 && !finalStickers.some(s => s.status === 'GENERATING' || s.status === 'PENDING')) {
+                saveWork({
+                    savedAt: Date.now(),
+                    stickerType,
+                    finalStickers: done,
+                    stickerPackageInfo,
+                    zipFileName,
+                    mainStickerId,
+                });
+            }
+        }
+    }, [appStep, finalStickers, stickerPackageInfo, zipFileName, mainStickerId, stickerType]);
+
+    const handleRestoreWork = () => {
+        if (!savedWork) return;
+        setStickerType(savedWork.stickerType);
+        setFinalStickers(savedWork.finalStickers);
+        setStickerPackageInfo(savedWork.stickerPackageInfo);
+        setZipFileName(savedWork.zipFileName || 'MyStickers');
+        setMainStickerId(savedWork.mainStickerId ?? savedWork.finalStickers[0]?.id ?? null);
+        setSavedWork(null);
+        setAppStep(AppStep.STICKER_PROCESSING);
+    };
+
+    const handleDiscardWork = () => {
+        setSavedWork(null);
+        clearWork();
+    };
+
 
 
     const handleBack = () => {
@@ -588,7 +659,7 @@ export const App = () => {
                     }
                 } catch (e) {
                     console.error(e);
-                    alert("圖片載入失敗");
+                    toast("圖片載入失敗", 'error');
                 } finally {
                     setIsProcessing(false);
                 }
@@ -625,7 +696,7 @@ export const App = () => {
             setGroupChars(prev => prev.map(c => c.id === id ? { ...c, description } : c));
         } catch (e) {
             console.error(e);
-            alert("分析失敗，請檢查 API Key 或網路連線");
+            toast("分析失敗，請檢查 API Key 或網路連線", 'error');
         } finally {
             setAnalyzingCharId(null);
         }
@@ -668,7 +739,7 @@ export const App = () => {
                     setAppStep(SHEET_EDITOR_STEP);
                 } catch (e) {
                     console.error(e);
-                    alert("底圖載入失敗");
+                    toast("底圖載入失敗", 'error');
                 } finally {
                     setIsProcessing(false);
                 }
@@ -711,13 +782,13 @@ export const App = () => {
                     }
                 });
                 setStickerConfigs(newConfigs);
-                alert(`已成功解析 ${ideas.length} 個貼圖設定並填入！`);
+                toast(`已成功解析 ${ideas.length} 個貼圖設定並填入！`, 'success');
             } else {
-                alert("無法解析內容。請確認格式是否為：1. 文字(中文指令)(English Prompt)");
+                toast("無法解析內容。請確認格式是否為：1. 文字(中文指令)(English Prompt)", 'error');
             }
         } catch (e) {
             console.error(e);
-            alert("解析失敗");
+            toast("解析失敗", 'error');
         } finally {
             setIsProcessing(false);
         }
@@ -733,7 +804,7 @@ export const App = () => {
             ));
         } catch (e) {
             console.error(e);
-            alert("翻譯失敗，請檢查網路");
+            toast("翻譯失敗，請檢查網路", 'error');
         } finally {
             setOptimizingId(null);
         }
@@ -749,7 +820,7 @@ export const App = () => {
             ));
         } catch (e) {
             console.error(e);
-            alert("優化失敗，請稍後再試");
+            toast("優化失敗，請稍後再試", 'error');
         } finally {
             setOptimizingId(null);
         }
@@ -763,7 +834,7 @@ export const App = () => {
             setPromptText(prompt);
         } catch (e) {
             console.error(e);
-            alert("靈感生成失敗，請再試一次");
+            toast("靈感生成失敗，請再試一次", 'error');
         } finally {
             setDiceLoading(false);
         }
@@ -777,7 +848,7 @@ export const App = () => {
             setPromptText(description);
         } catch (e) {
             console.error(e);
-            alert("描述生成失敗，請檢查網路連線");
+            toast("描述生成失敗，請檢查網路連線", 'error');
         } finally {
             setIsGeneratingDescription(false);
         }
@@ -789,14 +860,14 @@ export const App = () => {
         // Check validation for Group Mode
         if (inputMode === 'PHOTO') {
             // PHOTO Mode: Image is required, Description is OPTIONAL (from keyword input)
-            if (charCount > 1 && groupChars.some(c => !c.image)) return alert("請為所有角色上傳圖片！");
-            if (charCount === 1 && !sourceImage) return alert("請上傳圖片！");
+            if (charCount > 1 && groupChars.some(c => !c.image)) return toast("請為所有角色上傳圖片！", 'error');
+            if (charCount === 1 && !sourceImage) return toast("請上傳圖片！", 'error');
         } else if (!sourceImage && inputMode !== 'TEXT_PROMPT') {
             // EXISTING_IP or UPLOAD_SHEET: Image required
-            return alert("請先上傳圖片！");
+            return toast("請先上傳圖片！", 'error');
         } else if (inputMode === 'TEXT_PROMPT' && !promptText) {
             // TEXT_PROMPT: Prompt required
-            return alert("請輸入描述！");
+            return toast("請輸入描述！", 'error');
         }
 
         setIsProcessing(true);
@@ -873,7 +944,7 @@ export const App = () => {
             setAppStep(AppStep.CANDIDATE_SELECTION);
         } catch (error) {
             console.error(error);
-            alert("生成失敗，請稍後再試。");
+            toast("生成失敗，請稍後再試。", 'error');
         } finally {
             setIsProcessing(false);
         }
@@ -980,7 +1051,7 @@ export const App = () => {
             setAppStep(SHEET_EDITOR_STEP);
         } catch (error) {
             console.error(error);
-            alert("生成失敗，請檢查網路連線或 API Key。");
+            toast("生成失敗，請檢查網路連線或 API Key。", 'error');
         } finally {
             setIsProcessing(false);
         }
@@ -989,7 +1060,7 @@ export const App = () => {
     const handleAutoProcess = async () => {
         if (rawSheetUrls.length === 0) return;
         if (!isOpenCVReady) {
-            alert("OpenCV 尚未載入完成，請稍候再試。");
+            toast("影像處理模組尚未載入完成，請稍候再試。", 'error');
             return;
         }
 
@@ -1017,7 +1088,7 @@ export const App = () => {
             }
 
             if (allSlicedImages.length === 0) {
-                alert("OpenCV 未偵測到任何物件，請確認背景是否為綠色。");
+                toast("未偵測到任何物件，請確認背景是否為綠色。", 'error');
                 setIsProcessing(false);
                 return;
             }
@@ -1036,7 +1107,7 @@ export const App = () => {
 
         } catch (e) {
             console.error(e);
-            alert("自動處理失敗：" + (e as Error).message);
+            toast("自動處理失敗：" + (e as Error).message, 'error');
         } finally {
             setIsProcessing(false);
         }
@@ -1073,7 +1144,7 @@ export const App = () => {
                 setMagicEditorOpen(false);
             }
         } catch (error) {
-            console.error(error); alert("修復失敗");
+            console.error(error); toast("修復失敗", 'error');
         } finally {
             setIsProcessing(false);
         }
@@ -1081,7 +1152,7 @@ export const App = () => {
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text).then(() => {
-            alert("已複製到剪貼簿！");
+            toast("已複製到剪貼簿！", 'success');
         }).catch(err => {
             console.error('Failed to copy: ', err);
         });
@@ -1260,7 +1331,15 @@ export const App = () => {
                 </div>
             </nav>
 
-            <main className="max-w-7xl mx-auto p-6 pt-24">
+            <Stepper
+                current={appStep === AppStep.UPLOAD || appStep === AppStep.CANDIDATE_SELECTION ? 0
+                    : appStep === AppStep.STICKER_CONFIG ? 1
+                        : appStep === AppStep.SHEET_EDITOR ? 2 : 3}
+                labels={[t('stepIP'), t('stepCopy'), t('stepSticker'), t('stepPack')]}
+                isDark={theme === 'dark'}
+            />
+
+            <main className="max-w-7xl mx-auto p-6 pt-10">
                 {appStep > AppStep.UPLOAD && (
                     <button
                         onClick={handleBack}
@@ -1278,6 +1357,24 @@ export const App = () => {
                         {/* ... (Previous code remains the same) ... */}
                         {!inputMode && (
                             <>
+                                {savedWork && (
+                                    <div className={`max-w-2xl mx-auto rounded-2xl border-2 p-4 flex flex-wrap items-center gap-4 animate-fade-in ${theme === 'dark' ? 'bg-white/10 border-indigo-400/40' : 'bg-indigo-50 border-indigo-200'}`}>
+                                        <div className="flex -space-x-3">
+                                            {savedWork.finalStickers.slice(0, 4).map(s => (
+                                                <img key={s.id} src={s.url} alt="" className="keep-light w-12 h-12 rounded-xl bg-white border-2 border-white shadow object-contain" />
+                                            ))}
+                                        </div>
+                                        <div className="flex-1 min-w-[140px]">
+                                            <p className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{t('resumeWorkTitle')}</p>
+                                            <p className={`text-xs ${theme === 'dark' ? 'text-indigo-200' : 'text-slate-500'}`}>{savedWork.finalStickers.length} {t('unitSheet')} · {new Date(savedWork.savedAt).toLocaleString()}</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={handleRestoreWork} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow transition-colors">{t('resumeWork')}</button>
+                                            <button onClick={handleDiscardWork} className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors ${theme === 'dark' ? 'text-white/50 hover:text-white hover:bg-white/10' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}>{t('discardWork')}</button>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="text-center space-y-4">
                                     <h2 className={`text-4xl font-black ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{t('mainTitle')}</h2>
                                     <p className={`text-lg ${theme === 'dark' ? 'text-indigo-200' : 'text-slate-500'}`}>{t('mainSubtitle')}</p>

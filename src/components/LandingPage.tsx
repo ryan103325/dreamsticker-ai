@@ -7,6 +7,7 @@ import { isGoogleLoginEnabled, renderGoogleButton, loadGoogleProfile, GoogleProf
 import { MagicWandIcon } from './Icons';
 
 import { ApiKeyModal } from './ApiKeyModal';
+import { useToast } from './Toast';
 
 interface LandingPageProps {
     onStart: (key: string, openaiKey?: string, hfToken?: string) => void;
@@ -14,6 +15,7 @@ interface LandingPageProps {
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
     const { language, setLanguage: setSysLang, t } = useLanguage();
+    const toast = useToast();
     const [key, setKey] = useState("");
     const [openaiKey, setOpenaiKey] = useState("");
     const [hfToken, setHfToken] = useState("");
@@ -70,7 +72,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
             }
             onStart(trimmed, trimmedOpenai || undefined, trimmedHf || undefined);
         } else {
-            alert(t('invalidKey'));
+            toast(t('invalidKey'), 'error');
         }
     };
 
