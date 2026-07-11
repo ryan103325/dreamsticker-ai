@@ -78,42 +78,42 @@ interface PlatformSpec {
 | Discord emoji | 128×128 COVER | PNG | 256KB | — | 同上 |
 | 微信 | 240×240 CONTAIN | PNG | — | — | 微信表情開放平台 |
 
-- [ ] 建立 `platforms.ts` 與上表資料
-- [ ] `types.ts` 的 `STICKER_SPECS`/`EMOJI_SPECS` 改為由平台 cell 比例動態計算網格（`generateLayoutFor(platform, qty)`：找 rows×cols 使 sheet 比例最接近支援的 AR 桶、cell 比例最接近 platform.cell 比例）
-- [ ] 既有 LINE 流程整體遷移到 registry（LINE_STICKER/LINE_EMOJI 是第一批「吃自己狗糧」的平台）
+- [x] 建立 `platforms.ts` 與上表資料
+- [x] `types.ts` 的 `STICKER_SPECS`/`EMOJI_SPECS` 改為由平台 cell 比例動態計算網格（`generateLayoutFor(platform, qty)`：找 rows×cols 使 sheet 比例最接近支援的 AR 桶、cell 比例最接近 platform.cell 比例）
+- [x] 既有 LINE 流程整體遷移到 registry（LINE_STICKER/LINE_EMOJI 是第一批「吃自己狗糧」的平台）
 
 **驗收**：切換平台後，網格佈局、逐張生成尺寸、打包內容全部正確；LINE 行為與現狀完全一致（回歸）。
 
 ### 1.2 生成端參數化
 
-- [ ] `generateStickerSheet`：把寫死的 370/320/180（`targetCellW/H`）與白邊 prompt 段落改讀 platform
-- [ ] `generateSingleSticker`：`outlineRule`、aspect（512 平台用 1:1）改讀 platform
-- [ ] OpenAI 引擎的 `exactSize` 格子尺寸（現為 464×400/256×256）改為 `platform.cell × 1.25` 後取 16 倍數
-- [ ] 逐張生成後的 `fitImageToCanvas` 呼叫改讀 platform 的 cell/fit/padding
+- [x] `generateStickerSheet`：把寫死的 370/320/180（`targetCellW/H`）與白邊 prompt 段落改讀 platform
+- [x] `generateSingleSticker`：`outlineRule`、aspect（512 平台用 1:1）改讀 platform
+- [x] OpenAI 引擎的 `exactSize` 格子尺寸（現為 464×400/256×256）改為 `platform.cell × 1.25` 後取 16 倍數
+- [x] 逐張生成後的 `fitImageToCanvas` 呼叫改讀 platform 的 cell/fit/padding
 
 **地雷**：`App.tsx` 的 `handleAutoProcess` 內 slice 尺寸也寫死了 370/320/180/0，要一併改。
 
 ### 1.3 WebP 編碼與大小預算
 
-- [ ] `encodeWithBudget(canvas, format, maxBytes?)` 工具：
+- [x] `encodeWithBudget(canvas, format, maxBytes?)` 工具：
   - format=png 直接輸出
   - format=webp：特性偵測（toDataURL 後檢查回傳 MIME 前綴），不支援則動態 import `@jsquash/webp`
   - 有 maxBytes：lossless → lossy q 0.9~0.5 階梯 → 縮邊長 512→480→448 重試 → 全部失敗回傳最小結果並在 UI toast 警告
-- [ ] 單元測試：模擬大圖確認階梯邏輯（Node 環境可用假 encoder 測分支）
+- [x] 單元測試：模擬大圖確認階梯邏輯（Node 環境可用假 encoder 測分支）
 
 **驗收**：Chrome 與 Safari 都能輸出合法 WebP；WhatsApp 全部貼圖 <100KB、tray <50KB。
 
 ### 1.4 打包端
 
-- [ ] `generateFrameZip` 依 platform 決定：檔名規則、格式、extras、以及 zip 內附 `README.txt`（用 `packNote` 寫「這包東西怎麼上架」的逐步教學，Telegram 是發給 @Stickers bot、WhatsApp 是用第三方 App 匯入——使用者不知道這些會直接卡死）
-- [ ] main/tab/tray 這類衍生圖走 platform.extras 迴圈生成，移除現在的 if STATIC/EMOJI 硬编碼
+- [x] `generateFrameZip` 依 platform 決定：檔名規則、格式、extras、以及 zip 內附 `README.txt`（用 `packNote` 寫「這包東西怎麼上架」的逐步教學，Telegram 是發給 @Stickers bot、WhatsApp 是用第三方 App 匯入——使用者不知道這些會直接卡死）
+- [x] main/tab/tray 這類衍生圖走 platform.extras 迴圈生成，移除現在的 if STATIC/EMOJI 硬编碼
 
 ### 1.5 UI
 
-- [ ] 首頁的「一般貼圖/表情貼」切換器升級為平台選擇器（下拉或卡片；LINE 兩項 + 新平台）
-- [ ] 平台切換連動：成本徽章、網格數量選項、策略預設（512 平台預設逐張並顯示原因提示）
-- [ ] i18n：所有新字串 zh/en 兩份（規範見 CONTRIBUTING.md）
-- [ ] 成果頁的「前往上架」連結改讀 `platform.marketUrl`
+- [x] 首頁的「一般貼圖/表情貼」切換器升級為平台選擇器（下拉或卡片；LINE 兩項 + 新平台）
+- [x] 平台切換連動：成本徽章、網格數量選項、策略預設（512 平台預設逐張並顯示原因提示）
+- [x] i18n：所有新字串 zh/en 兩份（規範見 CONTRIBUTING.md）
+- [x] 成果頁的「前往上架」連結改讀 `platform.marketUrl`
 
 ### 1.6 端到端驗證（人工，需真 API Key）
 
@@ -141,18 +141,18 @@ interface PlatformSpec {
 
 依優先序：
 
-- [ ] **OpenCV 自行打包**：目前從 `docs.opencv.org` 載入 4.5.0（不是 CDN、隨時可能失效）。改用 npm 套件（如 `@techstark/opencv-js`）或 self-host wasm 到 `public/`。注意 bundle 大小，維持 lazy load。
-- [ ] **Service Worker / PWA 完成**：離線殼層 + 資源快取（生成功能離線無意義，但 app 殼要能開）。完成後手機「加入主畫面」即類原生體驗。
-- [ ] **CI 加 typecheck**：deploy.yml 的 build 前加 `npm run typecheck`（現在 vite build 不做型別檢查）。
-- [ ] **生成等待體驗**：全屏 Loader 改為階段式進度（分析 → 構圖 → 上色 → 切割），逐張模式已有卡片狀態可參考。
+- [x] **OpenCV 自行打包**：目前從 `docs.opencv.org` 載入 4.5.0（不是 CDN、隨時可能失效）。改用 npm 套件（如 `@techstark/opencv-js`）或 self-host wasm 到 `public/`。注意 bundle 大小，維持 lazy load。
+- [x] **Service Worker / PWA 完成**：離線殼層 + 資源快取（生成功能離線無意義，但 app 殼要能開）。完成後手機「加入主畫面」即類原生體驗。
+- [x] **CI 加 typecheck**：deploy.yml 的 build 前加 `npm run typecheck`（現在 vite build 不做型別檢查）。
+- [x] **生成等待體驗**：全屏 Loader 改為階段式進度（分析 → 構圖 → 上色 → 切割），逐張模式已有卡片狀態可參考。
 - [ ] **icon 系統化**：emoji 圖示（📸🖼️📝📂）換 `lucide-react`（或保留 emoji 作為風格決策，二擇一並統一）。
-- [ ] **手機 RWD**:固定底欄遮內容問題、navbar 小螢幕擁擠。
+- [x] **手機 RWD**:固定底欄遮內容問題、navbar 小螢幕擁擠。
 - [ ] **錯誤回報**：接 Sentry（免費額度夠用）；GA4 或 PostHog 基本埋點（頁面、生成成功率、引擎分佈）。
-- [ ] **i18n 檢查腳本**：`scripts/check-i18n.mjs` 掃描 `t('...')` 用量 vs 字典，缺鍵時 CI 失敗（歷史上發生過 39 個鍵缺失直接顯示鍵名的事故）。
-- [ ] **E2E 冒煙測試**：Playwright 腳本已有雛形（會話紀錄中），正式化放進 repo + CI。
+- [x] **i18n 檢查腳本**：`scripts/check-i18n.mjs` 掃描 `t('...')` 用量 vs 字典，缺鍵時 CI 失敗（歷史上發生過 39 個鍵缺失直接顯示鍵名的事故）。
+- [x] **E2E 冒煙測試**：Playwright 腳本已有雛形（會話紀錄中），正式化放進 repo + CI。
 - [ ] **深色模式長期方案**：現在是 `.dark` override sheet（`index.css`），可用但屬於過渡方案；長期應逐步遷移到 `dark:` variants。**不急，能用**。
-- [ ] **逐張生成的佇列管理**：目前並行 2、無取消功能；補「停止生成」按鈕與佇列取消。
-- [ ] **模型健康檢查**：啟動時輕量 ping 一次模型（或首次失敗時），preview 模型下架時給使用者明確提示而非默默降級。
+- [x] **逐張生成的佇列管理**：目前並行 2、無取消功能；補「停止生成」按鈕與佇列取消。
+- [x] **模型健康檢查**：啟動時輕量 ping 一次模型（或首次失敗時），preview 模型下架時給使用者明確提示而非默默降級。
 
 ---
 

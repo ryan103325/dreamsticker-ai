@@ -14,6 +14,16 @@ import { ThemeProvider } from './ThemeContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 
+// PWA: offline app shell + static asset cache (production builds only —
+// the service worker would fight Vite's dev-server module graph)
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((e) => {
+      console.warn('[sw] registration failed', e);
+    });
+  });
+}
+
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
