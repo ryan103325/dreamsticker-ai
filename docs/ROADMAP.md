@@ -147,7 +147,8 @@ interface PlatformSpec {
 - [x] **生成等待體驗**：全屏 Loader 改為階段式進度（分析 → 構圖 → 上色 → 切割），逐張模式已有卡片狀態可參考。
 - [x] **icon 系統化**：已定案「保留 emoji」作為風格決策（規範見 CONTRIBUTING.md）：功能性圖示用 `src/components/Icons.tsx` 的 SVG，裝飾性/情境圖示一律用 emoji，不引入 icon 庫。
 - [x] **手機 RWD**:固定底欄遮內容問題、navbar 小螢幕擁擠。
-- [ ] **錯誤回報**：接 Sentry（免費額度夠用）；GA4 或 PostHog 基本埋點（頁面、生成成功率、引擎分佈）。
+- [x] **錯誤回報（Sentry）**：已接。`VITE_SENTRY_DSN` 建置時注入（deploy.yml；未設定則完全停用）、`@sentry/react` 動態載入不佔主 bundle、事件上傳前過濾所有 API 金鑰樣式字串（`src/services/errorReporting.ts`，附單元測試）。
+- [ ] **使用分析**：GA4 或 PostHog 基本埋點（頁面、生成成功率、引擎分佈）。需先申請帳號，建議 PostHog。
 - [x] **i18n 檢查腳本**：`scripts/check-i18n.mjs` 掃描 `t('...')` 用量 vs 字典，缺鍵時 CI 失敗（歷史上發生過 39 個鍵缺失直接顯示鍵名的事故）。
 - [x] **E2E 冒煙測試**：Playwright 腳本已有雛形（會話紀錄中），正式化放進 repo + CI。
 - [ ] **深色模式長期方案**：現在是 `.dark` override sheet（`index.css`），可用但屬於過渡方案；長期應逐步遷移到 `dark:` variants。**不急，能用**。
