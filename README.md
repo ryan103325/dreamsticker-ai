@@ -1,12 +1,32 @@
-# DreamSticker AI
+# DreamSticker AI 🎨
 
-這是一個基於 AI 的 Line 貼圖生成工具，使用 Google Gemini 模型來發想、設計與生成貼圖。
+[![Deploy](https://github.com/ryan103325/dreamsticker-ai/actions/workflows/deploy.yml/badge.svg)](https://github.com/ryan103325/dreamsticker-ai/actions/workflows/deploy.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+**🚀 線上使用 / Live Demo: [ryan103325.github.io/dreamsticker-ai](https://ryan103325.github.io/dreamsticker-ai/)**
+
+用 AI 打造你的專屬通訊軟體貼圖：角色設計 → 文案發想 → 貼圖生成 → 自動去背切割 → 一鍵打包上架。純前端、零後端，API Key 只存在你的瀏覽器。
+
+> **English**: An AI-powered sticker pack generator for messaging apps (LINE sticker & emoji specs). Design a consistent character from a photo, text, or existing IP; generate sticker sheets with three switchable engines (Google Gemini / OpenAI GPT Image / open models via Hugging Face); auto-slice green-screen sheets with contour clustering; export store-ready ZIPs. 100% client-side — bring your own API key, nothing leaves your browser.
+
+![DreamSticker AI](docs/screenshot-home.png)
 
 ## 功能特色
-- **自動發想**：輸入主題，AI 自動產生貼圖點子。
-- **角色設計**：上傳參考圖或描述，產生一致的角色設計圖。
-- **貼圖生成**：支援單張生成與 T-Layout 團體貼圖生成。
-- **自動去背**：透過 OpenCV 自動處理綠幕去背。
+- **四種創作模式**：照片轉 IP、現有 IP 延伸、文字生成、上傳底圖純切割。
+- **三種生圖引擎**：Google Gemini（預設）、OpenAI GPT Image 2、Hugging Face 開源模型（Qwen-Image，中文字最強、最省錢）。
+- **兩種生成策略**：整張網格底圖（最省成本）或逐張生成（成功率最高、可單張重試）。
+- **智慧切割管線**：綠幕遮罩 → 輪廓偵測 → 間隙聚類切割 → 去綠邊 despill → LINE 規格輸出。
+- **AI 文案助手**：依角色自動發想貼圖文案與視覺指令，含中英雙語上架資訊生成。
+- **作品保存**：生成結果自動存於本機（IndexedDB），重新整理不遺失。
+- **深色模式、繁中/英文介面、PWA**。
+
+<details>
+<summary>📸 更多截圖 / More screenshots</summary>
+
+![Dark mode](docs/screenshot-dark.png)
+
+</details>
 
 ## 快速開始 (Getting Started)
 
@@ -69,9 +89,12 @@ VITE_HF_EDIT_MODEL=Qwen/Qwen-Image-Edit
 
 ### 2.7 影像管線
 
-- **切割**：輪廓偵測 + 網格歸位（取代逐行掃描），對版面漂移更穩健；同格的分離元素（角色 + 漂浮文字）會自動合併。
+- **規格對齊**：生圖 API 只接受比例桶（16:9 等）＋解析度檔位（1K/2K/4K），不接受任意像素尺寸。Prompt 中的畫布描述由程式依「API 實際會輸出的尺寸」計算（例如 2048×1152、每格 512×576），杜絕規格與實際輸出不一致造成的網格漂移。GPT Image 2 引擎支援任意尺寸，網格會以精確像素尺寸生成（每格 464×400）。
+- **動態解析度**：依網格密度自動選擇 2K/4K——24 張以上的密網格自動升 4K，確保每格切出後仍大於 LINE 目標尺寸（370×320）的 1.3 倍，**只縮小、永不放大**，解決切割後模糊的問題。
+- **切割**：輪廓偵測 → 同格碎片合併（角色＋漂浮文字）→ 依實際間隙做行列聚類（不假設格子均勻）；聚類無法解析時自動退回均勻網格法。
 - **去背**：HSV 綠幕遮罩（自動偵測非綠背景改用色差模式）＋ alpha 高斯柔邊。
 - **去綠邊（Despill）**：柔邊帶內偏綠像素的綠色通道會被壓制到 max(R,B)，消除綠色鑲邊。
+- **縮放品質**：所有 canvas 縮放皆使用高品質重採樣（imageSmoothingQuality: high）。
 
 ### 2.8 Google 帳號登入（選用）
 可讓使用者以 Google 帳號登入（顯示頭像與名稱、個人化體驗）。注意：登入不能取代 Gemini API Key，Key 仍需自行提供。
@@ -118,5 +141,8 @@ npm run build       # 產出 dist/
 - **AI**: Google Gemini API (`@google/genai`)
 - **Image Processing**: OpenCV.js, jszip, upng-js
 
-## 授權
-MIT
+## 貢獻 (Contributing)
+歡迎 PR 與 Issue！請先閱讀 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## 授權 (License)
+[MIT](LICENSE)

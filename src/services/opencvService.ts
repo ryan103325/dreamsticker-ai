@@ -30,6 +30,127 @@ export const waitForOpenCV = async (timeout = 30000): Promise<boolean> => {
 
 interface RectLike { x: number; y: number; width: number; height: number }
 
+const unionRect = (a: RectLike, b: RectLike): RectLike => {
+    const x = Math.min(a.x, b.x);
+    const y = Math.min(a.y, b.y);
+    return {
+        x, y,
+        width: Math.max(a.x + a.width, b.x + b.width) - x,
+        height: Math.max(a.y + a.height, b.y + b.height) - y,
+    };
+};
+
+const gapX = (a: RectLike, b: RectLike) => Math.max(0, Math.max(a.x, b.x) - Math.min(a.x + a.width, b.x + b.width));
+const gapY = (a: RectLike, b: RectLike) => Math.max(0, Math.max(a.y, b.y) - Math.min(a.y + a.height, b.y + b.height));
+
+/**
+ * Merges fragments that belong to the same sticker (e.g. a floating caption
+ * under its character): pieces that overlap or sit very close get unioned.
+ */
+const mergeFragments = (boxes: RectLike[], cellW: number, cellH: number): RectLike[] => {
+    const merged = boxes.map(b => ({ ...b }));
+    let changed = true;
+    while (changed) {
+        changed = false;
+        outer: for (let i = 0; i < merged.length; i++) {
+            for (let j = i + 1; j < merged.length; j++) {
+                if (gapX(merged[i], merged[j]) < cellW * 0.1 && gapY(merged[i], merged[j]) < cellH * 0.3) {
+                    merged[i] = unionRect(merged[i], merged[j]);
+                    merged.splice(j, 1);
+                    changed = true;
+                    break outer;
+                }
+            }
+        }
+    }
+    return merged;
+};
+
+/**
+ * Clusters merged boxes into a row-major grid by the actual gaps between
+ * them (no assumption that the model drew evenly-spaced cells). Returns null
+ * when the layout doesn't resolve to the expected structure — the caller
+ * then falls back to uniform-cell assignment.
+ */
+const clusterToGrid = (boxes: RectLike[], rows: number, cols: number, cellW: number, cellH: number): RectLike[] | null => {
+    if (boxes.length === 0 || boxes.length > rows * cols) return null;
+
+    const byY = [...boxes].sort((a, b) => (a.y + a.height / 2) - (b.y + b.height / 2));
+    const rowGroups: RectLike[][] = [];
+    for (const box of byY) {
+        const cy = box.y + box.height / 2;
+        const last = rowGroups[rowGroups.length - 1];
+        if (last) {
+            const lastCy = last.reduce((s, r) => s + r.y + r.height / 2, 0) / last.length;
+            if (Math.abs(cy - lastCy) < cellH * 0.45) {
+                last.push(box);
+                continue;
+            }
+        }
+        rowGroups.push([box]);
+    }
+    if (rowGroups.length !== rows) return null;
+
+    const result: RectLike[] = [];
+    for (const group of rowGroups) {
+        const byX = group.sort((a, b) => (a.x + a.width / 2) - (b.x + b.width / 2));
+        const colGroups: RectLike[][] = [];
+        for (const box of byX) {
+            const cx = box.x + box.width / 2;
+            const last = colGroups[colGroups.length - 1];
+            if (last) {
+                const lastCx = last.reduce((s, r) => s + r.x + r.width / 2, 0) / last.length;
+                if (Math.abs(cx - lastCx) < cellW * 0.45) {
+                    last.push(box);
+                    continue;
+                }
+            }
+            colGroups.push([box]);
+        }
+        if (colGroups.length > cols) return null;
+        for (const cg of colGroups) {
+            const u = cg.reduce(unionRect);
+            // A union larger than ~1.6 cells means clustering glued two
+            // stickers together -> unreliable, bail to the fallback.
+            if (u.width > cellW * 1.6 || u.height > cellH * 1.6) return null;
+            result.push(u);
+        }
+    }
+    return result;
+};
+
+/**
+ * Fallback: assign every box to its uniform grid cell by centroid and union
+ * per cell (works when the sheet layout is close to mathematically even).
+ */
+const uniformAssign = (boxes: RectLike[], rows: number, cols: number, totalW: number, totalH: number): RectLike[] => {
+    const cellW = totalW / cols;
+    const cellH = totalH / rows;
+    const cells: (RectLike | null)[] = new Array(rows * cols).fill(null);
+    for (const rect of boxes) {
+        const cx = rect.x + rect.width / 2;
+        const cy = rect.y + rect.height / 2;
+        const col = Math.min(cols - 1, Math.max(0, Math.floor(cx / cellW)));
+        const row = Math.min(rows - 1, Math.max(0, Math.floor(cy / cellH)));
+        const idx = row * cols + col;
+        cells[idx] = cells[idx] ? unionRect(cells[idx]!, rect) : { ...rect };
+    }
+    // Clamp each union to its own cell neighborhood (20% overflow allowed)
+    const out: RectLike[] = [];
+    for (let idx = 0; idx < cells.length; idx++) {
+        const tight = cells[idx];
+        if (!tight) continue;
+        const row = Math.floor(idx / cols);
+        const col = idx % cols;
+        const x1 = Math.round(Math.max(tight.x, col * cellW - cellW * 0.2, 0));
+        const y1 = Math.round(Math.max(tight.y, row * cellH - cellH * 0.2, 0));
+        const x2 = Math.round(Math.min(tight.x + tight.width, (col + 1) * cellW + cellW * 0.2, totalW));
+        const y2 = Math.round(Math.min(tight.y + tight.height, (row + 1) * cellH + cellH * 0.2, totalH));
+        if (x2 - x1 > 8 && y2 - y1 > 8) out.push({ x: x1, y: y1, width: x2 - x1, height: y2 - y1 });
+    }
+    return out;
+};
+
 /**
  * Suppresses green spill on the semi-transparent edge band produced by the
  * alpha blur: any greenish edge pixel gets its green channel clamped to
@@ -50,24 +171,17 @@ const despillCanvas = (canvas: HTMLCanvasElement) => {
 };
 
 /**
- * Main function to process a sheet using CONTOUR + GRID-ASSIGNMENT SLICING.
+ * Main function to process a sheet using CONTOUR + GAP-CLUSTERING SLICING.
  *
  * Algorithm:
  * 1. Smart Background Masking (Green screen via HSV, or generic solid color).
- * 2. Find ALL content contours on the full mask (robust to grid drift —
- *    no assumption that separator lines are perfectly straight or evenly
- *    spaced, unlike line-scan slicing).
- * 3. Assign each contour to its logical grid cell by centroid, and union the
- *    bounding boxes per cell (character + floating text pieces merge).
- * 4. Crop each cell from the alpha-applied source, soften + despill edges,
- *    and fit to the target LINE dimensions.
- *
- * @param imageUrl Source Image Data URL
- * @param rows Number of rows in the grid
- * @param cols Number of columns in the grid
- * @param targetW Output width per sticker (e.g., 370 or 180)
- * @param targetH Output height per sticker (e.g., 320 or 180)
- * @param padding Inner padding; 0 = COVER mode (emoji), >0 = CONTAIN (sticker)
+ * 2. Find ALL content contours on the full mask.
+ * 3. Merge fragments belonging to the same sticker (character + caption).
+ * 4. Cluster merged blobs into rows/columns by the ACTUAL gaps between them
+ *    (robust to uneven, drifted grids); fall back to uniform-cell centroid
+ *    assignment when the layout doesn't resolve cleanly.
+ * 5. Crop each sticker from the alpha-applied source, soften + despill edges,
+ *    and fit to the target LINE dimensions with high-quality resampling.
  */
 export const processGreenScreenAndSlice = async (
     imageUrl: string,
@@ -151,9 +265,8 @@ export const processGreenScreenAndSlice = async (
                 cv.merge(resultPlanes, src);
                 r.delete(); g.delete(); b.delete(); rgbaPlanes.delete(); resultPlanes.delete();
 
-                // === CONTOUR + GRID-ASSIGNMENT SLICING ===
+                // === CONTOUR + GAP-CLUSTERING SLICING ===
 
-                const slicedImages: string[] = [];
                 const totalH = src.rows;
                 const totalW = src.cols;
                 const cellW = totalW / cols;
@@ -163,48 +276,28 @@ export const processGreenScreenAndSlice = async (
                 const hierarchy = new cv.Mat();
                 cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-                // Union bounding box per logical grid cell (row-major order)
-                const cellRects: (RectLike | null)[] = new Array(rows * cols).fill(null);
-
+                const boxes: RectLike[] = [];
                 for (let k = 0; k < contours.size(); ++k) {
                     const rect = cv.boundingRect(contours.get(k));
                     if (rect.width < 8 || rect.height < 8) continue; // noise specks
-
-                    const cx = rect.x + rect.width / 2;
-                    const cy = rect.y + rect.height / 2;
-                    const col = Math.min(cols - 1, Math.max(0, Math.floor(cx / cellW)));
-                    const row = Math.min(rows - 1, Math.max(0, Math.floor(cy / cellH)));
-                    const idx = row * cols + col;
-
-                    const prev = cellRects[idx];
-                    if (!prev) {
-                        cellRects[idx] = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-                    } else {
-                        const x1 = Math.min(prev.x, rect.x);
-                        const y1 = Math.min(prev.y, rect.y);
-                        const x2 = Math.max(prev.x + prev.width, rect.x + rect.width);
-                        const y2 = Math.max(prev.y + prev.height, rect.y + rect.height);
-                        cellRects[idx] = { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
-                    }
+                    boxes.push({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
                 }
                 contours.delete(); hierarchy.delete();
 
-                // Allow content to bleed slightly past its cell (models are not
-                // pixel-perfect), but clamp so a mis-assigned speck can't drag
-                // the crop across the whole sheet.
-                const overflowX = cellW * 0.2;
-                const overflowY = cellH * 0.2;
+                const merged = mergeFragments(boxes, cellW, cellH);
+                let finalRects = clusterToGrid(merged, rows, cols, cellW, cellH);
+                if (!finalRects) {
+                    console.warn('[Slicer] Gap clustering did not resolve cleanly; using uniform-grid fallback.');
+                    finalRects = uniformAssign(merged, rows, cols, totalW, totalH);
+                }
 
-                for (let idx = 0; idx < cellRects.length; idx++) {
-                    const tight = cellRects[idx];
-                    if (!tight) continue; // empty cell -> skip
+                const slicedImages: string[] = [];
 
-                    const row = Math.floor(idx / cols);
-                    const col = idx % cols;
-                    const x1 = Math.round(Math.max(tight.x, col * cellW - overflowX, 0));
-                    const y1 = Math.round(Math.max(tight.y, row * cellH - overflowY, 0));
-                    const x2 = Math.round(Math.min(tight.x + tight.width, (col + 1) * cellW + overflowX, totalW));
-                    const y2 = Math.round(Math.min(tight.y + tight.height, (row + 1) * cellH + overflowY, totalH));
+                for (const tight of finalRects) {
+                    const x1 = Math.max(0, Math.round(tight.x) - 2);
+                    const y1 = Math.max(0, Math.round(tight.y) - 2);
+                    const x2 = Math.min(totalW, Math.round(tight.x + tight.width) + 2);
+                    const y2 = Math.min(totalH, Math.round(tight.y + tight.height) + 2);
                     const w = x2 - x1;
                     const h = y2 - y1;
                     if (w <= 8 || h <= 8) continue;
@@ -237,6 +330,8 @@ export const processGreenScreenAndSlice = async (
                     cellCanvas.height = targetH;
                     const ctx = cellCanvas.getContext('2d');
                     if (!ctx) continue;
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
 
                     const availableW = targetW - (padding * 2);
                     const availableH = targetH - (padding * 2);
