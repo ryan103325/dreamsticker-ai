@@ -69,6 +69,36 @@ const buildImageConfig = (model: string, opts: { aspectRatio?: string; imageSize
     if (opts.imageSize && model.startsWith('gemini-3')) config.imageSize = opts.imageSize;
     return config;
 };
+
+// The API only accepts aspect-ratio buckets + resolution tiers, never exact
+// pixel dimensions. These helpers compute what the API will ACTUALLY return,
+// so prompts can describe the real canvas (spec drift between "what we asked
+// in prose" and "what the model renders" was the main cause of broken grids).
+const AR_UNITS: Record<string, { w: number; h: number }> = {
+    '1:1': { w: 1, h: 1 }, '4:3': { w: 4, h: 3 }, '3:4': { w: 3, h: 4 },
+    '16:9': { w: 16, h: 9 }, '9:16': { w: 9, h: 16 },
+};
+
+export const sheetDimsFor = (ar: string, size: '1K' | '2K' | '4K') => {
+    const unit = AR_UNITS[ar] || AR_UNITS['1:1'];
+    const longEdge = size === '4K' ? 4096 : size === '2K' ? 2048 : 1024;
+    const scale = longEdge / Math.max(unit.w, unit.h);
+    return { width: Math.round(unit.w * scale), height: Math.round(unit.h * scale) };
+};
+
+/**
+ * Picks the cheapest resolution tier whose per-cell pixel size still leaves
+ * downscale headroom over the LINE target (370x320 / 180x180). Dense grids
+ * (24-40 stickers) need 4K or every sliced sticker gets UPSCALED and blurry —
+ * this was the source of the resolution-loss problem.
+ */
+export const pickSheetImageSize = (ar: string, cols: number, rows: number, targetCellW: number, targetCellH: number): '2K' | '4K' => {
+    for (const size of ['2K', '4K'] as const) {
+        const { width, height } = sheetDimsFor(ar, size);
+        if (width / cols >= targetCellW * 1.3 && height / rows >= targetCellH * 1.3) return size;
+    }
+    return '4K';
+};
 // -----------------------------------------------------------------------
 
 import { loadApiKey } from "./storageUtils";
@@ -742,6 +772,16 @@ export const generateStickerSheet = async (characterUrl: string, configs: Sticke
     const bestAR = supportedRatios.reduce((prev, curr) => Math.abs(curr.val - ratioVal) < Math.abs(prev.val - ratioVal) ? curr : prev).ar;
     const targetRatio = supportedRatios.find(r => r.ar === bestAR)?.val || 1.0;
 
+    // Describe the canvas the API will ACTUALLY render (aspect bucket +
+    // resolution tier), so the model's grid math matches reality.
+    const targetCellW = stickerType === 'EMOJI' ? 180 : 370;
+    const targetCellH = stickerType === 'EMOJI' ? 180 : 320;
+    const sheetSize = pickSheetImageSize(bestAR, cols, rows, targetCellW, targetCellH);
+    const dims = sheetDimsFor(bestAR, sheetSize);
+    const cellW = Math.floor(dims.width / cols);
+    const cellH = Math.floor(dims.height / rows);
+    const canvasSpec = `Canvas: ${dims.width}x${dims.height} pixels (aspect ${bestAR}). Grid: ${cols} columns x ${rows} rows, so each cell is exactly ~${cellW}x${cellH} pixels. Respect these cell boundaries strictly.`;
+
     const gridInstructions = configs.map((c, i) => `   - Cell ${i + 1}: Action "${c.emotionPrompt}".${c.showText ? `TEXT: "${c.text}" (Interact with this text!)` : "NO TEXT"}.`).join('\n');
 
     let basePrompt = "";
@@ -749,8 +789,7 @@ export const generateStickerSheet = async (characterUrl: string, configs: Sticke
     if (stickerType === 'EMOJI') {
         // --- EMOJI MODE PROMPT ---
         basePrompt = `
-    Grid Specification: ${cols} columns x ${rows} rows.
-    Target Resolution: 2K(2048x2048).
+    ${canvasSpec}
     [System Role] Icon Designer / Emoji Artist.
     [Formatting] Center characters.Solid Green(#00FF00) BG.
 
@@ -778,8 +817,7 @@ export const generateStickerSheet = async (characterUrl: string, configs: Sticke
     } else {
         // --- STANDARD STICKER MODE PROMPT ---
         basePrompt = `
-    Grid Specification: ${cols} columns x ${rows} rows.
-    Target Resolution: 2K(2048x2048).
+    ${canvasSpec}
     [System Role] Senior Sticker Artist.
     [Formatting] Center characters.Solid Green(#00FF00) BG. 
 
@@ -819,10 +857,17 @@ Spacing: Ensure > 3 % green gap between all stickers(Vertical & Horizontal).
     }
 
     if (getImageEngine() === 'OPENAI') {
+        // gpt-image-2 supports arbitrary sizes: generate the grid at its exact
+        // intended dimensions (cell 464x400 keeps 1.25x headroom over 370x320).
+        const oCellW = stickerType === 'EMOJI' ? 256 : 464;
+        const oCellH = stickerType === 'EMOJI' ? 256 : 400;
+        const exact = { width: cols * oCellW, height: rows * oCellH };
+        const oSpec = `Canvas: ${exact.width}x${exact.height} pixels. Grid: ${cols} columns x ${rows} rows, each cell exactly ${oCellW}x${oCellH} pixels. Respect these cell boundaries strictly.`;
         const url = await openaiGenerateImage({
-            prompt: basePrompt,
+            prompt: basePrompt.replace(canvasSpec, oSpec),
             images: [characterUrl],
             aspect: bestAR as OpenAIAspect,
+            exactSize: exact,
             quality: openaiQuality(),
         });
         return { url };
@@ -847,8 +892,8 @@ Spacing: Ensure > 3 % green gap between all stickers(Vertical & Horizontal).
             const response = await ai.models.generateContent({
                 model,
                 contents: { parts: [{ inlineData: { mimeType: 'image/png', data: base64Char } }, { text: basePrompt }] },
-                // 2K resolution for static sheets to save tokens and time (Pro only)
-                config: { imageConfig: buildImageConfig(model, { aspectRatio: bestAR, imageSize: "2K" }) }
+                // Resolution tier picked so each cell keeps downscale headroom
+                config: { imageConfig: buildImageConfig(model, { aspectRatio: bestAR, imageSize: sheetSize }) }
             });
             validateResponse(response);
             const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);

@@ -268,6 +268,8 @@ export const fitImageToCanvas = (
             canvas.width = targetW; canvas.height = targetH;
             const ctx = canvas.getContext('2d');
             if (!ctx) return reject(new Error('Canvas context failed'));
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
             const availW = targetW - padding * 2;
             const availH = targetH - padding * 2;
             const scale = mode === 'COVER'
@@ -378,6 +380,8 @@ export const generateTabImage = async (sourceUrl: string): Promise<string> => {
             canvas.width = 96; canvas.height = 74;
             const ctx = canvas.getContext('2d');
             if (!ctx) return reject(new Error("Canvas context failed"));
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
 
             // Smart Fit: Emojis are 180x180 (Square), Tab is 96x74
             // Center and Scale to fit Height or Width (Contain)
@@ -419,6 +423,8 @@ export const generateFrameZip = async (stickers: any[], zipName: string, mainSti
                 const mainCanvas = document.createElement('canvas'); mainCanvas.width = 240; mainCanvas.height = 240;
                 const ctxM = mainCanvas.getContext('2d');
                 if (ctxM) {
+                    ctxM.imageSmoothingEnabled = true;
+                    ctxM.imageSmoothingQuality = 'high';
                     const scale = Math.min(240 / img.width, 240 / img.height);
                     const w = img.width * scale, h = img.height * scale;
                     ctxM.drawImage(img, (240 - w) / 2, (240 - h) / 2, w, h);
@@ -430,6 +436,8 @@ export const generateFrameZip = async (stickers: any[], zipName: string, mainSti
             const tabCanvas = document.createElement('canvas'); tabCanvas.width = 96; tabCanvas.height = 74;
             const ctxT = tabCanvas.getContext('2d');
             if (ctxT) {
+                ctxT.imageSmoothingEnabled = true;
+                ctxT.imageSmoothingQuality = 'high';
                 const scaleT = Math.min(96 / img.width, 74 / img.height);
                 const wT = img.width * scaleT, hT = img.height * scaleT;
                 ctxT.drawImage(img, (96 - wT) / 2, (74 - hT) / 2, wT, hT);

@@ -72,6 +72,36 @@ const SIZE_MAP: Record<string, Record<OpenAIAspect, string>> = {
 const sizeFor = (model: string, aspect: OpenAIAspect): string =>
     (SIZE_MAP[model] || SIZE_MAP.default)[aspect];
 
+/**
+ * gpt-image-2 accepts arbitrary dimensions (multiples of 16, long edge <=
+ * 3840, ratio <= 3:1, 0.65-8.3 MP) — that lets grid sheets be generated at
+ * their EXACT intended pixel size, eliminating spec drift entirely.
+ */
+const sanitizeExactSize = (w: number, h: number): string | null => {
+    let width = Math.round(w / 16) * 16;
+    let height = Math.round(h / 16) * 16;
+    const ratio = Math.max(width, height) / Math.min(width, height);
+    if (ratio > 3) return null;
+    // Scale down into the long-edge cap, up into the min pixel budget
+    const longCap = 3840;
+    if (Math.max(width, height) > longCap) {
+        const s = longCap / Math.max(width, height);
+        width = Math.floor(width * s / 16) * 16;
+        height = Math.floor(height * s / 16) * 16;
+    }
+    if (width * height < 655360) {
+        const s = Math.sqrt(655360 / (width * height));
+        width = Math.ceil(width * s / 16) * 16;
+        height = Math.ceil(height * s / 16) * 16;
+    }
+    if (width * height > 8294400) {
+        const s = Math.sqrt(8294400 / (width * height));
+        width = Math.floor(width * s / 16) * 16;
+        height = Math.floor(height * s / 16) * 16;
+    }
+    return `${width}x${height}`;
+};
+
 const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => (await fetch(dataUrl)).blob();
 
 interface OpenAIImageOptions {
@@ -79,6 +109,8 @@ interface OpenAIImageOptions {
     /** Reference images as data URLs; presence switches to the edits endpoint. */
     images?: string[];
     aspect?: OpenAIAspect;
+    /** Exact pixel dimensions; honored on gpt-image-2, aspect fallback otherwise. */
+    exactSize?: { width: number; height: number };
     quality: 'high' | 'medium' | 'low';
 }
 
@@ -86,7 +118,10 @@ const callOpenAI = async (model: string, opts: OpenAIImageOptions): Promise<stri
     const key = getOpenAIApiKey();
     if (!key) throw new Error('OpenAI API Key Missing');
 
-    const size = sizeFor(model, opts.aspect || 'auto');
+    const exact = opts.exactSize && model === 'gpt-image-2'
+        ? sanitizeExactSize(opts.exactSize.width, opts.exactSize.height)
+        : null;
+    const size = exact || sizeFor(model, opts.aspect || 'auto');
     let response: Response;
 
     if (opts.images && opts.images.length > 0) {
