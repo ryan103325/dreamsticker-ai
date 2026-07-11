@@ -11,14 +11,20 @@ if (!rootElement) {
 import { LanguageProvider } from './LanguageContext';
 
 import { ThemeProvider } from './ThemeContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { ToastProvider } from './components/Toast';
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <LanguageProvider>
-      <ThemeProvider>
-        <App />
-      </ThemeProvider>
-    </LanguageProvider>
+    <ErrorBoundary>
+      <LanguageProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </ThemeProvider>
+      </LanguageProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

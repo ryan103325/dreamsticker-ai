@@ -5,7 +5,7 @@ export interface GeneratedImage {
   id: string;
   url: string; // Data URL for images (Preview)
   emotion?: string;
-  type: 'STATIC';
+  type: StickerType;
   status?: GenerationStatus;
   error?: string;
 }

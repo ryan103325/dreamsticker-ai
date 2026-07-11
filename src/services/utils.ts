@@ -156,22 +156,53 @@ const applyErosion = (imgData, w, h, strength) => {
     return imgData;
 };
 
+// 4. 去綠邊 (Despill) - 邊緣像素的綠色殘留抑制
+// 對「靠近透明區 2px 內」且偏綠的像素，把綠色通道壓到 max(R,B)，消除綠色鑲邊。
+const applyDespill = (imgData, w, h) => {
+    const data = imgData.data;
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const idx = (y * w + x) * 4;
+            const a = data[idx + 3];
+            if (a === 0) continue;
+            const g = data[idx + 1];
+            const m = Math.max(data[idx], data[idx + 2]);
+            if (g <= m) continue; // not greenish, skip early
+
+            let nearEdge = false;
+            for (let dy = -2; dy <= 2 && !nearEdge; dy++) {
+                const ny = y + dy;
+                if (ny < 0 || ny >= h) { nearEdge = true; break; }
+                for (let dx = -2; dx <= 2; dx++) {
+                    const nx = x + dx;
+                    if (nx < 0 || nx >= w || data[(ny * w + nx) * 4 + 3] === 0) { nearEdge = true; break; }
+                }
+            }
+            if (nearEdge) data[idx + 1] = m;
+        }
+    }
+    return imgData;
+};
+
 // Main Worker Logic
 self.onmessage = function(e) {
     const { id, rawImageData, removalMode, targetColorHex, colorTolerance, erodeStrength, width, height } = e.data;
-    
-    let processedImageData = rawImageData; 
-    
+
+    let processedImageData = rawImageData;
+
     // 預設使用 Flood Fill 模式，因為這是貼圖最需要的 (保護內部細節)
     if (removalMode === 'flood' || true) {
         processedImageData = removeBgFloodFill(processedImageData, width, height, targetColorHex || '#00ff00', colorTolerance || 20);
     }
-    
+
     // 執行邊緣侵蝕
     if (erodeStrength > 0) {
         processedImageData = applyErosion(processedImageData, width, height, erodeStrength);
     }
-    
+
+    // 去綠邊
+    processedImageData = applyDespill(processedImageData, width, height);
+
     // 將結果傳回主執行緒
     self.postMessage({ id: id, processedImageData: processedImageData, width, height }, [processedImageData.data.buffer]);
 };
@@ -206,10 +237,47 @@ export const resizeImage = (dataUrl: string, maxWidth: number): Promise<string> 
             const canvas = document.createElement('canvas');
             canvas.width = w; canvas.height = h;
             const ctx = canvas.getContext('2d');
-            ctx?.drawImage(img, 0, 0, w, h);
+            if (!ctx) return resolve(dataUrl);
+            // JPEG has no alpha channel: transparent PNG uploads would turn
+            // black. Composite onto white before encoding.
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
             resolve(canvas.toDataURL('image/jpeg', 0.9));
         };
         img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+    });
+};
+
+/**
+ * Fits a (typically background-removed) sticker image into the exact LINE
+ * target canvas: CONTAIN with padding for stickers, COVER for emojis.
+ */
+export const fitImageToCanvas = (
+    dataUrl: string,
+    targetW: number,
+    targetH: number,
+    mode: 'CONTAIN' | 'COVER' = 'CONTAIN',
+    padding: number = 2
+): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = targetW; canvas.height = targetH;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return reject(new Error('Canvas context failed'));
+            const availW = targetW - padding * 2;
+            const availH = targetH - padding * 2;
+            const scale = mode === 'COVER'
+                ? Math.max(availW / img.width, availH / img.height)
+                : Math.min(availW / img.width, availH / img.height);
+            const w = img.width * scale, h = img.height * scale;
+            ctx.drawImage(img, (targetW - w) / 2, (targetH - h) / 2, w, h);
+            resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => reject(new Error('Image load failed'));
         img.src = dataUrl;
     });
 };

@@ -1,18 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '../LanguageContext';
-import { loadApiKey } from '../services/storageUtils';
+import { loadApiKey, saveApiKey, clearApiKey } from '../services/storageUtils';
+import { getOpenAIApiKey, saveOpenAIApiKey, clearOpenAIApiKey } from '../services/openaiImageService';
+import { getHFToken, saveHFToken, clearHFToken } from '../services/hfImageService';
+import { isGoogleLoginEnabled, renderGoogleButton, loadGoogleProfile, GoogleProfile } from '../services/googleAuth';
 import { MagicWandIcon } from './Icons';
 
 import { ApiKeyModal } from './ApiKeyModal';
+import { useToast } from './Toast';
 
 interface LandingPageProps {
-    onStart: (key: string) => void;
+    onStart: (key: string, openaiKey?: string, hfToken?: string) => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
     const { language, setLanguage: setSysLang, t } = useLanguage();
+    const toast = useToast();
     const [key, setKey] = useState("");
+    const [openaiKey, setOpenaiKey] = useState("");
+    const [hfToken, setHfToken] = useState("");
+    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [remember, setRemember] = useState(false);
     const [showGuideModal, setShowGuideModal] = useState(false);
+    const [profile, setProfile] = useState<GoogleProfile | null>(() => loadGoogleProfile());
+    const googleBtnRef = useRef<HTMLDivElement>(null);
 
     const toggleLang = () => {
         setSysLang(language === 'zh' ? 'en' : 'zh');
@@ -20,15 +31,48 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
 
     useEffect(() => {
         const stored = loadApiKey();
-        if (stored) setKey(stored);
+        if (stored) {
+            setKey(stored);
+            setRemember(true);
+        }
+        const storedOpenai = getOpenAIApiKey();
+        if (storedOpenai) {
+            setOpenaiKey(storedOpenai);
+            setShowAdvanced(true);
+        }
+        const storedHf = getHFToken();
+        if (storedHf) {
+            setHfToken(storedHf);
+            setShowAdvanced(true);
+        }
     }, []);
+
+    useEffect(() => {
+        if (isGoogleLoginEnabled() && googleBtnRef.current && !profile) {
+            renderGoogleButton(googleBtnRef.current, setProfile).catch(e => console.warn(e));
+        }
+    }, [profile]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (key.trim().length > 10) {
-            onStart(key.trim());
+        const trimmed = key.trim();
+        const trimmedOpenai = openaiKey.trim();
+        const trimmedHf = hfToken.trim();
+        if (trimmed.length > 10) {
+            if (remember) {
+                saveApiKey(trimmed);
+                if (trimmedOpenai) saveOpenAIApiKey(trimmedOpenai);
+                else clearOpenAIApiKey();
+                if (trimmedHf) saveHFToken(trimmedHf);
+                else clearHFToken();
+            } else {
+                clearApiKey();
+                clearOpenAIApiKey();
+                clearHFToken();
+            }
+            onStart(trimmed, trimmedOpenai || undefined, trimmedHf || undefined);
         } else {
-            alert(t('invalidKey'));
+            toast(t('invalidKey'), 'error');
         }
     };
 
@@ -60,6 +104,27 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
                     <p className="text-indigo-200">{t('landingTitle')}</p>
                 </div>
 
+                {isGoogleLoginEnabled() && (
+                    <div className="mb-6 flex flex-col items-center gap-3">
+                        {profile ? (
+                            <div className="flex items-center gap-3 bg-white/10 border border-white/20 rounded-full pl-1.5 pr-4 py-1.5">
+                                <img src={profile.picture} alt={profile.name} referrerPolicy="no-referrer" className="w-8 h-8 rounded-full" />
+                                <div className="text-left">
+                                    <p className="text-xs font-bold text-white leading-tight">{profile.name}</p>
+                                    <p className="text-[10px] text-indigo-300 leading-tight">{profile.email}</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div ref={googleBtnRef} className="flex justify-center min-h-[44px]" />
+                        )}
+                        <div className="w-full flex items-center gap-3 text-[10px] text-white/30">
+                            <div className="flex-1 h-px bg-white/10"></div>
+                            <span>API Key</span>
+                            <div className="flex-1 h-px bg-white/10"></div>
+                        </div>
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
                         <label className="block text-sm font-medium text-indigo-200 mb-2">{t('apiKeyLabel')}</label>
@@ -72,6 +137,49 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
                             className="w-full px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all"
                         />
                     </div>
+
+                    <div>
+                        <button
+                            type="button"
+                            onClick={() => setShowAdvanced(!showAdvanced)}
+                            className="text-[11px] text-indigo-300/80 hover:text-indigo-200 font-bold flex items-center gap-1 transition-colors"
+                        >
+                            <span>{showAdvanced ? '▾' : '▸'}</span> {t('advancedOptions')}
+                        </button>
+                        {showAdvanced && (
+                            <div className="mt-3 space-y-2 animate-fade-in">
+                                <label className="block text-xs font-medium text-indigo-200">{t('openaiKeyLabel')}</label>
+                                <input
+                                    type="password"
+                                    value={openaiKey}
+                                    onChange={(e) => setOpenaiKey(e.target.value)}
+                                    placeholder={t('openaiKeyPlaceholder')}
+                                    className="w-full px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition-all"
+                                />
+                                <p className="text-[10px] text-white/40 leading-relaxed">{t('openaiKeyNote')}</p>
+
+                                <label className="block text-xs font-medium text-indigo-200 pt-2">{t('hfKeyLabel')}</label>
+                                <input
+                                    type="password"
+                                    value={hfToken}
+                                    onChange={(e) => setHfToken(e.target.value)}
+                                    placeholder={t('hfKeyPlaceholder')}
+                                    className="w-full px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent transition-all"
+                                />
+                                <p className="text-[10px] text-white/40 leading-relaxed">{t('hfKeyNote')}</p>
+                            </div>
+                        )}
+                    </div>
+
+                    <label className="flex items-center gap-2 text-xs text-indigo-200 cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={remember}
+                            onChange={(e) => setRemember(e.target.checked)}
+                            className="w-4 h-4 rounded accent-indigo-500"
+                        />
+                        {t('rememberKey')}
+                    </label>
 
                     <button
                         type="submit"

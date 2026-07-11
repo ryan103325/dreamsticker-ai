@@ -1,6 +1,7 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { MagicWandIcon, CloseIcon, TrashIcon, UndoIcon, BrushIcon, EraserIcon, CircleIcon } from './Icons';
+import { useToast } from './Toast';
 
 interface MagicEditorProps {
     imageUrl: string;
@@ -19,6 +20,7 @@ export const MagicEditor: React.FC<MagicEditorProps> = ({
     isProcessing,
     isAnimated = false
 }) => {
+    const toast = useToast();
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const imgRef = useRef<HTMLImageElement>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
@@ -217,7 +219,7 @@ export const MagicEditor: React.FC<MagicEditorProps> = ({
     };
 
     const handleSubmit = () => {
-        if (!prompt.trim()) return alert("請輸入修改指令！(例如：改成戴帽子)");
+        if (!prompt.trim()) return toast("請輸入修改指令！(例如：改成戴帽子)", 'error');
         const canvas = canvasRef.current;
         const img = imgRef.current;
         if (canvas && img) {

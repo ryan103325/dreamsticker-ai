@@ -34,6 +34,8 @@ jobs:
         run: npm run build
         env:
           CI: true
+          # Optional: enables the Google Sign-In button when configured in repo secrets
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4

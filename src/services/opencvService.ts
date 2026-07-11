@@ -1,7 +1,8 @@
 
 /**
  * OpenCV Service for Green Screen Auto-Slicing
- * Uses OpenCV.js to detect green background, find contours, and slice characters.
+ * Uses OpenCV.js to detect the background, find content contours, and slice
+ * characters out of a grid sheet.
  */
 
 // Helper to wait for OpenCV to be ready
@@ -27,20 +28,46 @@ export const waitForOpenCV = async (timeout = 30000): Promise<boolean> => {
     });
 };
 
+interface RectLike { x: number; y: number; width: number; height: number }
+
 /**
- * Main function to process a sheet using SEQUENTIAL DYNAMIC GRID SLICING.
- * 
+ * Suppresses green spill on the semi-transparent edge band produced by the
+ * alpha blur: any greenish edge pixel gets its green channel clamped to
+ * max(red, blue), removing the tell-tale green fringe around cut stickers.
+ */
+const despillCanvas = (canvas: HTMLCanvasElement) => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = imgData.data;
+    for (let i = 0; i < d.length; i += 4) {
+        const a = d[i + 3];
+        if (a === 0 || a >= 250) continue; // only the soft edge band
+        const m = Math.max(d[i], d[i + 2]);
+        if (d[i + 1] > m) d[i + 1] = m;
+    }
+    ctx.putImageData(imgData, 0, 0);
+};
+
+/**
+ * Main function to process a sheet using CONTOUR + GRID-ASSIGNMENT SLICING.
+ *
  * Algorithm:
- * 1. Smart Background Masking (Supports Green/White/Blue).
- * 2. Sequential Row Slicing: Find cutY for row i based on startY of row i.
- * 3. Sequential Col Slicing: Find cutX for col j based on startX of col j.
- * 4. Cell Extraction: Crop -> Trim (Contour) -> Resize to Target.
- * 
+ * 1. Smart Background Masking (Green screen via HSV, or generic solid color).
+ * 2. Find ALL content contours on the full mask (robust to grid drift —
+ *    no assumption that separator lines are perfectly straight or evenly
+ *    spaced, unlike line-scan slicing).
+ * 3. Assign each contour to its logical grid cell by centroid, and union the
+ *    bounding boxes per cell (character + floating text pieces merge).
+ * 4. Crop each cell from the alpha-applied source, soften + despill edges,
+ *    and fit to the target LINE dimensions.
+ *
  * @param imageUrl Source Image Data URL
  * @param rows Number of rows in the grid
  * @param cols Number of columns in the grid
- * @param targetW Output width per sticker (e.g., 370 or 320)
- * @param targetH Output height per sticker (e.g., 320 or 270)
+ * @param targetW Output width per sticker (e.g., 370 or 180)
+ * @param targetH Output height per sticker (e.g., 320 or 180)
+ * @param padding Inner padding; 0 = COVER mode (emoji), >0 = CONTAIN (sticker)
  */
 export const processGreenScreenAndSlice = async (
     imageUrl: string,
@@ -48,7 +75,7 @@ export const processGreenScreenAndSlice = async (
     cols: number,
     targetW: number,
     targetH: number,
-    padding: number = 2 // Default to 2 for stickers
+    padding: number = 2
 ): Promise<string[]> => {
     const isCvReady = await waitForOpenCV();
     if (!isCvReady) throw new Error("OpenCV is not loaded.");
@@ -67,7 +94,6 @@ export const processGreenScreenAndSlice = async (
                 const mask = new cv.Mat();
 
                 // 2. Smart Background Detection
-                // Sample corners to find dominant BG color.
                 cv.cvtColor(src, cvt, cv.COLOR_RGBA2RGB);
 
                 // Sample Top-Left Pixel
@@ -91,7 +117,6 @@ export const processGreenScreenAndSlice = async (
                     cv.cvtColor(src, hsv, cv.COLOR_RGBA2RGB);
                     cv.cvtColor(hsv, hsv, cv.COLOR_RGB2HSV);
 
-                    // Wide Green Range
                     const low = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [35, 40, 40, 0]);
                     const high = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [85, 255, 255, 255]);
                     cv.inRange(hsv, low, high, mask);
@@ -99,7 +124,7 @@ export const processGreenScreenAndSlice = async (
                     low.delete(); high.delete(); hsv.delete();
                 } else {
                     // --- GENERIC SOLID COLOR MODE (Color Difference) ---
-                    const tol = 30; // Tolerance
+                    const tol = 30;
                     const low = new cv.Mat(cvt.rows, cvt.cols, cvt.type(), [Math.max(0, bgR - tol), Math.max(0, bgG - tol), Math.max(0, bgB - tol), 0]);
                     const high = new cv.Mat(cvt.rows, cvt.cols, cvt.type(), [Math.min(255, bgR + tol), Math.min(255, bgG + tol), Math.min(255, bgB + tol), 255]);
 
@@ -126,220 +151,105 @@ export const processGreenScreenAndSlice = async (
                 cv.merge(resultPlanes, src);
                 r.delete(); g.delete(); b.delete(); rgbaPlanes.delete(); resultPlanes.delete();
 
-                // === SEQUENTIAL DYNAMIC GRID SLICING ===
+                // === CONTOUR + GRID-ASSIGNMENT SLICING ===
 
                 const slicedImages: string[] = [];
-                // Use parameter PADDING
-
-                let currentY = 0;
-                // Use source dimensions for calculation
                 const totalH = src.rows;
                 const totalW = src.cols;
+                const cellW = totalW / cols;
+                const cellH = totalH / rows;
 
-                // Estimated average height/width (Guide only)
-                const avgH = totalH / rows;
-                const avgW = totalW / cols;
+                const contours = new cv.MatVector();
+                const hierarchy = new cv.Mat();
+                cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-                for (let r = 0; r < rows; r++) {
-                    let cutY = totalH; // Default to bottom for last row
+                // Union bounding box per logical grid cell (row-major order)
+                const cellRects: (RectLike | null)[] = new Array(rows * cols).fill(null);
 
-                    // 1. Find Horizontal Cut (Bottom of this row)
-                    if (r < rows - 1) {
-                        const targetY = currentY + avgH;
-                        const searchRange = avgH * 0.25; // Search +/- 25%
+                for (let k = 0; k < contours.size(); ++k) {
+                    const rect = cv.boundingRect(contours.get(k));
+                    if (rect.width < 8 || rect.height < 8) continue; // noise specks
 
-                        const startY = Math.max(currentY + 10, Math.floor(targetY - searchRange));
-                        const endY = Math.min(totalH - 1, Math.floor(targetY + searchRange));
+                    const cx = rect.x + rect.width / 2;
+                    const cy = rect.y + rect.height / 2;
+                    const col = Math.min(cols - 1, Math.max(0, Math.floor(cx / cellW)));
+                    const row = Math.min(rows - 1, Math.max(0, Math.floor(cy / cellH)));
+                    const idx = row * cols + col;
 
-                        let bestY = Math.floor(targetY);
-                        let minPixels = Number.MAX_VALUE;
-
-                        // Scan logic: Find the line with minimum content pixels
-                        for (let y = startY; y <= endY; y++) {
-                            const rowVec = mask.row(y);
-                            const count = cv.countNonZero(rowVec);
-                            rowVec.delete();
-
-                            // If perfect green line found, take it immediately
-                            if (count === 0) {
-                                bestY = y;
-                                break;
-                            }
-
-                            if (count < minPixels) {
-                                minPixels = count;
-                                bestY = y;
-                            }
-                        }
-                        cutY = bestY;
+                    const prev = cellRects[idx];
+                    if (!prev) {
+                        cellRects[idx] = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+                    } else {
+                        const x1 = Math.min(prev.x, rect.x);
+                        const y1 = Math.min(prev.y, rect.y);
+                        const x2 = Math.max(prev.x + prev.width, rect.x + rect.width);
+                        const y2 = Math.max(prev.y + prev.height, rect.y + rect.height);
+                        cellRects[idx] = { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
                     }
+                }
+                contours.delete(); hierarchy.delete();
 
-                    const h = cutY - currentY;
+                // Allow content to bleed slightly past its cell (models are not
+                // pixel-perfect), but clamp so a mis-assigned speck can't drag
+                // the crop across the whole sheet.
+                const overflowX = cellW * 0.2;
+                const overflowY = cellH * 0.2;
 
-                    // If row is valid height
-                    if (h > 10) {
-                        // 2. Define Row ROI
-                        const rowRect = new cv.Rect(0, currentY, totalW, h);
-                        // Ensure bounds
-                        if (rowRect.y + rowRect.height > totalH) rowRect.height = totalH - rowRect.y;
+                for (let idx = 0; idx < cellRects.length; idx++) {
+                    const tight = cellRects[idx];
+                    if (!tight) continue; // empty cell -> skip
 
-                        const rowMask = mask.roi(rowRect);
+                    const row = Math.floor(idx / cols);
+                    const col = idx % cols;
+                    const x1 = Math.round(Math.max(tight.x, col * cellW - overflowX, 0));
+                    const y1 = Math.round(Math.max(tight.y, row * cellH - overflowY, 0));
+                    const x2 = Math.round(Math.min(tight.x + tight.width, (col + 1) * cellW + overflowX, totalW));
+                    const y2 = Math.round(Math.min(tight.y + tight.height, (row + 1) * cellH + overflowY, totalH));
+                    const w = x2 - x1;
+                    const h = y2 - y1;
+                    if (w <= 8 || h <= 8) continue;
 
-                        let currentX = 0;
+                    const absRect = new cv.Rect(x1, y1, w, h);
+                    const finalRoi = src.roi(absRect);
 
-                        for (let c = 0; c < cols; c++) {
-                            let cutX = totalW; // Default to right edge for last col
+                    // Soft edge: Gaussian blur on the alpha channel only
+                    const channels = new cv.MatVector();
+                    cv.split(finalRoi, channels);
+                    const alphaChannel = channels.get(3);
+                    const ksize = new cv.Size(5, 5);
+                    cv.GaussianBlur(alphaChannel, alphaChannel, ksize, 0, 0);
+                    channels.set(3, alphaChannel);
+                    cv.merge(channels, finalRoi);
+                    alphaChannel.delete();
+                    channels.delete();
 
-                            // 3. Find Vertical Cut (Right of this cell)
-                            if (c < cols - 1) {
-                                const targetX = currentX + avgW;
-                                const searchRangeX = avgW * 0.25;
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = w;
+                    tempCanvas.height = h;
+                    cv.imshow(tempCanvas, finalRoi);
+                    finalRoi.delete();
 
-                                const startX = Math.max(currentX + 10, Math.floor(targetX - searchRangeX));
-                                const endX = Math.min(totalW - 1, Math.floor(targetX + searchRangeX));
+                    // Green spill suppression on the soft edge band
+                    despillCanvas(tempCanvas);
 
-                                let bestX = Math.floor(targetX);
-                                let minPixelsX = Number.MAX_VALUE;
+                    const cellCanvas = document.createElement('canvas');
+                    cellCanvas.width = targetW;
+                    cellCanvas.height = targetH;
+                    const ctx = cellCanvas.getContext('2d');
+                    if (!ctx) continue;
 
-                                for (let x = startX; x <= endX; x++) {
-                                    const colVec = rowMask.col(x); // x is relative to rowMask (which is 0..totalW)
-                                    const count = cv.countNonZero(colVec);
-                                    colVec.delete();
+                    const availableW = targetW - (padding * 2);
+                    const availableH = targetH - (padding * 2);
 
-                                    if (count === 0) {
-                                        bestX = x;
-                                        break;
-                                    }
-                                    if (count < minPixelsX) {
-                                        minPixelsX = count;
-                                        bestX = x;
-                                    }
-                                }
-                                cutX = bestX;
-                            }
+                    // padding 0 = EMOJI full-bleed (COVER); otherwise CONTAIN
+                    const scale = padding === 0
+                        ? Math.max(availableW / w, availableH / h)
+                        : Math.min(availableW / w, availableH / h);
 
-                            const w = cutX - currentX;
-
-                            // 4. Extract Cell & Trim
-                            if (w > 10) {
-                                // Cell ROI relative to Row ROI
-                                const cellRectRel = new cv.Rect(currentX, 0, w, h);
-                                // Safety clamp
-                                if (cellRectRel.x + cellRectRel.width > totalW) cellRectRel.width = totalW - cellRectRel.x;
-
-                                const cellMask = rowMask.roi(cellRectRel);
-
-                                // Find contours inside this cell to trim borders
-                                const contours = new cv.MatVector();
-                                const hierarchy = new cv.Mat();
-                                cv.findContours(cellMask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-                                let tightRect: any = null;
-
-                                for (let k = 0; k < contours.size(); ++k) {
-                                    const rect = cv.boundingRect(contours.get(k));
-                                    if (rect.width < 5 || rect.height < 5) continue;
-
-                                    if (!tightRect) {
-                                        tightRect = rect;
-                                    } else {
-                                        const tx1 = Math.min(tightRect.x, rect.x);
-                                        const ty1 = Math.min(tightRect.y, rect.y);
-                                        const tx2 = Math.max(tightRect.x + tightRect.width, rect.x + rect.width);
-                                        const ty2 = Math.max(tightRect.y + tightRect.height, rect.y + rect.height);
-                                        tightRect = { x: tx1, y: ty1, width: tx2 - tx1, height: ty2 - ty1 };
-                                    }
-                                }
-
-                                cellMask.delete(); contours.delete(); hierarchy.delete();
-
-                                // 5. Resize & Fit (CENTERING & ASPECT RATIO)
-                                if (tightRect) {
-                                    // Convert tightRect (Cell-Relative) to Absolute Coords
-                                    const absRect = new cv.Rect(
-                                        currentX + tightRect.x,
-                                        currentY + tightRect.y,
-                                        tightRect.width,
-                                        tightRect.height
-                                    );
-
-                                    // Extract from Original Source (with Alpha)
-                                    const finalRoi = src.roi(absRect);
-
-                                    // --- 🌟 ADDED: Enhanced Soft Edge / Anti-Aliasing Logic ---
-                                    // To remove jagged edges, we apply a Gaussian Blur ONLY to the Alpha Channel.
-                                    const channels = new cv.MatVector();
-                                    cv.split(finalRoi, channels);
-
-                                    // Index 3 is Alpha
-                                    const alphaChannel = channels.get(3);
-
-                                    // Use a 5x5 kernel for stronger smoothing (Enhanced Soft Edge)
-                                    const ksize = new cv.Size(5, 5);
-                                    cv.GaussianBlur(alphaChannel, alphaChannel, ksize, 0, 0);
-
-                                    // Merge back
-                                    channels.set(3, alphaChannel);
-                                    cv.merge(channels, finalRoi);
-
-                                    // Clean up Mat objects
-                                    alphaChannel.delete();
-                                    channels.delete();
-                                    // --------------------------------------------------
-
-                                    const tempCanvas = document.createElement('canvas');
-                                    tempCanvas.width = absRect.width;
-                                    tempCanvas.height = absRect.height;
-                                    cv.imshow(tempCanvas, finalRoi);
-
-                                    const cellCanvas = document.createElement('canvas');
-                                    cellCanvas.width = targetW;
-                                    cellCanvas.height = targetH;
-                                    const ctx = cellCanvas.getContext('2d');
-
-                                    if (ctx) {
-                                        const availableW = targetW - (padding * 2);
-                                        const availableH = targetH - (padding * 2);
-
-                                        // Calculate Scale - UPDATED: Support for 'COVER' mode for Emojis
-                                        let scale;
-                                        if (padding === 0) {
-                                            // EMOJI MODE: COVER Logic (Full Bleed)
-                                            // We want to fill the entire 180x180 square.
-                                            // Use Math.max to ensure the image covers the target dimension.
-                                            // This might crop top/bottom or sides if aspect ratio doesn't match perfectly.
-                                            scale = Math.max(availableW / absRect.width, availableH / absRect.height);
-                                        } else {
-                                            // STICKER MODE: CONTAIN Logic (Padding Preserved)
-                                            // Fit entirely within the box with padding.
-                                            scale = Math.min(availableW / absRect.width, availableH / absRect.height);
-                                        }
-
-                                        const drawW = absRect.width * scale;
-                                        const drawH = absRect.height * scale;
-
-                                        // Center alignment calculation
-                                        const drawX = (targetW - drawW) / 2;
-                                        const drawY = (targetH - drawH) / 2;
-
-                                        ctx.drawImage(tempCanvas, 0, 0, absRect.width, absRect.height, drawX, drawY, drawW, drawH);
-                                        slicedImages.push(cellCanvas.toDataURL('image/png'));
-                                    }
-                                    finalRoi.delete();
-                                } else {
-                                    // Handle empty cell if needed? For now we skip.
-                                }
-                            }
-
-                            // Advance X
-                            currentX = cutX;
-                        }
-
-                        rowMask.delete();
-                    }
-
-                    // Advance Y
-                    currentY = cutY;
+                    const drawW = w * scale;
+                    const drawH = h * scale;
+                    ctx.drawImage(tempCanvas, 0, 0, w, h, (targetW - drawW) / 2, (targetH - drawH) / 2, drawW, drawH);
+                    slicedImages.push(cellCanvas.toDataURL('image/png'));
                 }
 
                 // Cleanup
@@ -353,7 +263,7 @@ export const processGreenScreenAndSlice = async (
                 reject(e);
             }
         };
-        img.onerror = (e) => reject(new Error("Failed to load image for OpenCV processing"));
+        img.onerror = () => reject(new Error("Failed to load image for OpenCV processing"));
         img.src = imageUrl;
     });
 };

@@ -11,21 +11,22 @@ import {
     FontConfig,
     LANGUAGES,
     FONT_STYLES,
-    GenerationStatus,
     StickerQuantity,
-    StickerSheet,
     generateDefaultConfigs,
     SheetLayout,
     getStickerSpec,
+    getEmojiSpec,
     StickerPackageInfo,
     STICKER_SPECS,
     EMOJI_SPECS,
     CharacterInput
 } from './types';
 import { useLanguage } from './LanguageContext';
-import { generateIPCharacter, generateStickerSheet, editSticker, parseStickerIdeas, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish, generateStickerPlan, parseStructuredStickerPlan, analyzeImageSubject, generateSimpleIcons } from './services/geminiService';
-import { loadApiKey, clearApiKey } from './services/storageUtils';
-import { generateFrameZip, wait, resizeImage, extractDominantColors, blobToDataUrl, getFontFamily, processGreenScreenImage, generateTabImage } from './services/utils';
+import { generateIPCharacter, generateStickerSheet, editSticker, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish, generateStickerPlan, parseStructuredStickerPlan, analyzeImageSubject, generateSimpleIcons, getQualityMode, setQualityMode, QualityMode, getImageEngine, setImageEngine, ImageEngine } from './services/geminiService';
+import { setOpenAIApiKey, hasOpenAIKey } from './services/openaiImageService';
+import { setHFToken, hasHFToken } from './services/hfImageService';
+import { generateFrameZip, resizeImage, extractDominantColors, processGreenScreenImage, generateTabImage, fitImageToCanvas } from './services/utils';
+import { generateSingleSticker } from './services/geminiService';
 import { processGreenScreenAndSlice, waitForOpenCV } from './services/opencvService';
 import { Loader } from './components/Loader';
 import { MagicEditor } from './components/MagicEditor';
@@ -33,6 +34,9 @@ import { HelpModal } from './components/HelpModal';
 import { UploadIcon, MagicWandIcon, StickerIcon, DownloadIcon, RefreshIcon, EditIcon, CloseIcon, HelpIcon, StarIcon, CopyIcon, ExternalLinkIcon, FolderOpenIcon, DiceIcon, TrashIcon, ArrowLeftIcon } from './components/Icons';
 import { LandingPage } from './components/LandingPage';
 import { setApiKey } from './services/geminiService';
+import { loadGoogleProfile, clearGoogleProfile, GoogleProfile } from './services/googleAuth';
+import { useToast } from './components/Toast';
+import { saveWork, loadWork, clearWork, SavedWork } from './services/persistence';
 
 // Add new step for Smart Crop Preview
 const SHEET_EDITOR_STEP = AppStep.SHEET_EDITOR;
@@ -48,18 +52,6 @@ const ART_STYLES = [
     'artStyle_minimal',
     'artStyle_pixel',
     'artStyle_ghibli'
-];
-
-// Predefined Font Options for Quick Selection
-const FONT_OPTIONS = [
-    "華康布丁體",
-    "思源黑體",
-    "俐方體",
-    "粉圓體",
-    "華康少女文字",
-    "懶狗狗體",
-    "激燃體",
-    "M+字體"
 ];
 
 const CopyBtn = ({ text, label = "複製", successLabel = "已複製" }: { text: string, label?: string, successLabel?: string }) => {
@@ -119,7 +111,7 @@ const StickerCard: React.FC<StickerCardProps> = ({
                 </div>
             )}
 
-            <div className="aspect-square p-4 flex items-center justify-center bg-gray-[50] relative bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgBDAm9BGDWAAJyRCgLaBCAAgXwixzAS0pgAAAABJRU5ErkJggg==')]">
+            <div className="aspect-square p-4 flex items-center justify-center bg-gray-50 relative bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgBDAm9BGDWAAJyRCgLaBCAAgXwixzAS0pgAAAABJRU5ErkJggg==')]">
                 {sticker.status === 'PENDING' && (
                     <div className="flex flex-col items-center justify-center text-gray-400">
                         <span className="text-3xl mb-2 opacity-20">⏳</span>
@@ -150,15 +142,15 @@ const StickerCard: React.FC<StickerCardProps> = ({
                         <img src={sticker.url} alt={sticker.emotion} className="max-w-full max-h-full object-contain drop-shadow-sm" />
 
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 backdrop-blur-[2px]">
-                            <button onClick={onSetMain} className={`p-2 rounded-full transition-colors shadow-lg ${isMain ? 'bg-amber-400 text-white' : 'bg-white text-gray-400 hover:text-amber-400 hover:bg-amber-50'}`} title="設為主圖 (Main/Tab)">
+                            <button onClick={onSetMain} className={`keep-light p-2 rounded-full transition-colors shadow-lg ${isMain ? 'bg-amber-400 text-white' : 'bg-white text-gray-400 hover:text-amber-400 hover:bg-amber-50'}`} title="設為主圖 (Main/Tab)">
                                 <StarIcon filled={isMain} />
                             </button>
 
-                            <button onClick={onEdit} className="p-2 bg-white text-gray-800 rounded-full hover:bg-purple-50 hover:text-purple-600 transition-colors shadow-lg" title="魔法修復">
+                            <button onClick={onEdit} className="keep-light p-2 bg-white text-gray-800 rounded-full hover:bg-purple-50 hover:text-purple-600 transition-colors shadow-lg" title="魔法修復">
                                 <MagicWandIcon />
                             </button>
 
-                            <button onClick={onDownload} className="p-2 bg-white text-gray-800 rounded-full hover:bg-green-50 hover:text-green-600 transition-colors shadow-lg" title="下載">
+                            <button onClick={onDownload} className="keep-light p-2 bg-white text-gray-800 rounded-full hover:bg-green-50 hover:text-green-600 transition-colors shadow-lg" title="下載">
                                 <DownloadIcon />
                             </button>
                         </div>
@@ -177,6 +169,31 @@ const StickerCard: React.FC<StickerCardProps> = ({
     );
 };
 
+// Flow progress indicator shown under the navbar
+const Stepper = ({ current, labels, isDark }: { current: number; labels: string[]; isDark: boolean }) => (
+    <div className="flex items-center justify-center gap-0 mt-6 px-4 select-none" aria-label="progress">
+        {labels.map((label, i) => (
+            <React.Fragment key={label}>
+                {i > 0 && (
+                    <div className={`h-0.5 w-6 sm:w-12 rounded transition-colors ${i <= current ? 'bg-indigo-500' : (isDark ? 'bg-white/15' : 'bg-slate-200')}`}></div>
+                )}
+                <div className="flex items-center gap-2">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black transition-all
+                        ${i < current ? 'bg-indigo-500 text-white' :
+                            i === current ? (isDark ? 'bg-indigo-400 text-white ring-4 ring-indigo-400/20' : 'bg-indigo-600 text-white ring-4 ring-indigo-100') :
+                                (isDark ? 'bg-white/10 text-white/40' : 'bg-slate-100 text-slate-400')}`}>
+                        {i < current ? '✓' : i + 1}
+                    </div>
+                    <span className={`text-xs font-bold hidden md:inline transition-colors
+                        ${i === current ? (isDark ? 'text-white' : 'text-slate-800') : (isDark ? 'text-white/40' : 'text-slate-400')}`}>
+                        {label}
+                    </span>
+                </div>
+            </React.Fragment>
+        ))}
+    </div>
+);
+
 // Custom Text Toggle Component
 const TextToggle = ({ enabled, onChange }: { enabled: boolean, onChange: (val: boolean) => void }) => (
     <div className="flex items-center gap-3 p-2 bg-indigo-50/50 rounded-xl border border-indigo-100/50">
@@ -186,17 +203,17 @@ const TextToggle = ({ enabled, onChange }: { enabled: boolean, onChange: (val: b
             onClick={() => onChange(!enabled)}
         >
             {/* Knob */}
-            <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 flex items-center justify-center text-[10px] font-bold text-slate-600
-                ${enabled ? 'left-1' : 'left-9'}`}
+            <div className={`keep-light absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300 flex items-center justify-center text-[10px] font-bold text-slate-600
+                ${enabled ? 'left-9' : 'left-1'}`}
             >
             </div>
             {/* Label inside track */}
             <span className={`absolute top-1/2 -translate-y-1/2 text-[10px] font-black text-white transition-opacity duration-300
-                ${enabled ? 'right-2 opacity-100' : 'right-2 opacity-0'}`}>
+                ${enabled ? 'left-2 opacity-100' : 'left-2 opacity-0'}`}>
                 ON
             </span>
             <span className={`absolute top-1/2 -translate-y-1/2 text-[10px] font-black text-white transition-opacity duration-300
-                ${enabled ? 'left-2 opacity-0' : 'left-2 opacity-100'}`}>
+                ${enabled ? 'right-2 opacity-0' : 'right-2 opacity-100'}`}>
                 OFF
             </span>
         </div>
@@ -205,6 +222,7 @@ const TextToggle = ({ enabled, onChange }: { enabled: boolean, onChange: (val: b
 
 // External Prompt Generator Component
 const ExternalPromptGenerator = ({ onApply, isProcessing, characterType }: { onApply: (text: string) => void, isProcessing: boolean, characterType: string }) => {
+    const toast = useToast();
     const [isOpen, setIsOpen] = useState(false);
     const [qty, setQty] = useState(8);
     const [category, setCategory] = useState("綜合"); // Default to Mixed
@@ -225,10 +243,10 @@ const ExternalPromptGenerator = ({ onApply, isProcessing, characterType }: { onA
             const plan = await generateStickerPlan(qty, finalCategory, characterType);
             if (plan) {
                 onApply(plan);
-                alert("文案已生成並填入！請點擊上方「分析並自動填入」來套用設定。");
+                toast("文案已生成並填入！請點擊上方「分析並自動填入」來套用設定。", 'success');
             }
         } catch (e) {
-            alert("生成失敗，請稍後再試。");
+            toast("生成失敗，請稍後再試。", 'error');
             console.error(e);
         } finally {
             setIsGeneratingPlan(false);
@@ -326,13 +344,14 @@ const ExternalPromptGenerator = ({ onApply, isProcessing, characterType }: { onA
 };
 
 const SimpleIconGenerator = ({ onApply }: { onApply: (text: string) => void }) => {
+    const toast = useToast();
     const [isOpen, setIsOpen] = useState(false);
     const [qty, setQty] = useState(8);
     const [topic, setTopic] = useState("");
     const [isGenerating, setIsGenerating] = useState(false);
 
     const handleGenerate = async () => {
-        if (!topic.trim()) return alert("請輸入主題 (Topic)");
+        if (!topic.trim()) return toast("請輸入主題 (Topic)", 'error');
         setIsGenerating(true);
         try {
             const list = await generateSimpleIcons(qty, topic);
@@ -341,7 +360,7 @@ const SimpleIconGenerator = ({ onApply }: { onApply: (text: string) => void }) =
             }
         } catch (e) {
             console.error(e);
-            alert("文案生成失敗");
+            toast("文案生成失敗", 'error');
         } finally {
             setIsGenerating(false);
         }
@@ -406,6 +425,7 @@ export const App = () => {
     // const [apiKeyReady, setApiKeyReady] = useState(false); // Removed
     const { language: sysLang, setLanguage: setSysLang, t } = useLanguage();
     const { theme, toggleTheme } = useTheme();
+    const toast = useToast();
 
     // const [sysLang, setSysLang] = useState<LanguageCode>('zh'); // System UI Language
     // const t = translations[sysLang]; // I18n Helper
@@ -442,13 +462,50 @@ export const App = () => {
     // Product Type State (Sticker vs Emoji)
     const [stickerType, setStickerType] = useState<StickerType>('STATIC');
 
+    // Generation Quality Mode (Pro vs Flash image model)
+    const [genQuality, setGenQuality] = useState<QualityMode>(getQualityMode());
+    const handleQualityChange = (mode: QualityMode) => {
+        setGenQuality(mode);
+        setQualityMode(mode);
+    };
+
+    // Image Engine (Gemini default; OpenAI / Hugging Face need their own keys)
+    const [openaiAvailable, setOpenaiAvailable] = useState<boolean>(hasOpenAIKey());
+    const [hfAvailable, setHfAvailable] = useState<boolean>(hasHFToken());
+    const [imageEngine, setImageEngineState] = useState<ImageEngine>(getImageEngine());
+    const handleEngineChange = (engine: ImageEngine) => {
+        setImageEngineState(engine);
+        setImageEngine(engine);
+    };
+
+    // Generation strategy: one big grid sheet (cheapest) vs per-sticker
+    // generation (no slicing failure mode, per-sticker retry, costs more).
+    const [genMode, setGenModeState] = useState<'SHEET' | 'INDIVIDUAL'>(() => {
+        try { return localStorage.getItem('gen_mode') === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'SHEET'; } catch { return 'SHEET'; }
+    });
+    const handleGenModeChange = (mode: 'SHEET' | 'INDIVIDUAL') => {
+        setGenModeState(mode);
+        try { localStorage.setItem('gen_mode', mode); } catch { /* ignore */ }
+    };
+
+    // Rough USD estimate for one generation run, so the cost difference
+    // between strategies is visible BEFORE clicking generate.
+    const estimatedCost = useMemo(() => {
+        if (genMode === 'INDIVIDUAL') {
+            // Individual mode is pinned to the economy tier (see geminiService)
+            const perSticker = imageEngine === 'OPENAI' ? 0.13 : imageEngine === 'HF' ? 0.03 : 0.067;
+            return `$${(stickerQuantity * perSticker).toFixed(2)}`;
+        }
+        if (imageEngine === 'OPENAI') return genQuality === 'QUALITY' ? '$0.5' : '$0.15';
+        if (imageEngine === 'HF') return '$0.02~0.05';
+        return genQuality === 'QUALITY' ? '$0.13~0.24' : '$0.10~0.15';
+    }, [genMode, stickerQuantity, imageEngine, genQuality]);
+
     const [fontConfig, setFontConfig] = useState<FontConfig>({
         language: LANGUAGES[0],
         style: FONT_STYLES[1],
         color: "#000000"
     });
-    const [customFont, setCustomFont] = useState<string>("");
-
     // No Text Mode
     const [includeText, setIncludeText] = useState(true);
 
@@ -489,10 +546,27 @@ export const App = () => {
     const sheetInputRef = useRef<HTMLInputElement>(null);
 
     const [hasKey, setHasKey] = useState(false);
+    const [googleProfile, setGoogleProfile] = useState<GoogleProfile | null>(() => loadGoogleProfile());
 
-    const setKeyAndStart = (key: string) => {
+    const setKeyAndStart = (key: string, openaiKey?: string, hfToken?: string) => {
         setApiKey(key);
+        if (openaiKey) setOpenAIApiKey(openaiKey);
+        if (hfToken) setHFToken(hfToken);
+        const hasOpenai = !!openaiKey || hasOpenAIKey();
+        const hasHf = !!hfToken || hasHFToken();
+        setOpenaiAvailable(hasOpenai);
+        setHfAvailable(hasHf);
+        // Reset the engine if its key is gone
+        if ((getImageEngine() === 'OPENAI' && !hasOpenai) || (getImageEngine() === 'HF' && !hasHf)) {
+            handleEngineChange('GEMINI');
+        }
+        setGoogleProfile(loadGoogleProfile());
         setHasKey(true);
+    };
+
+    const handleSignOut = () => {
+        clearGoogleProfile();
+        setGoogleProfile(null);
     };
 
     // Security update: No auto-loading of keys.
@@ -502,6 +576,47 @@ export const App = () => {
     useEffect(() => {
         waitForOpenCV().then(ready => setIsOpenCVReady(ready));
     }, []);
+
+    // 3. Work persistence: offer to restore the last finished set, and keep
+    // the current one saved so a refresh doesn't destroy the output.
+    const [savedWork, setSavedWork] = useState<SavedWork | null>(null);
+    useEffect(() => {
+        loadWork().then(w => {
+            if (w && w.finalStickers.some(s => s.status === 'SUCCESS')) setSavedWork(w);
+        });
+    }, []);
+
+    useEffect(() => {
+        if (appStep === AppStep.STICKER_PROCESSING) {
+            const done = finalStickers.filter(s => s.status === 'SUCCESS');
+            if (done.length > 0 && !finalStickers.some(s => s.status === 'GENERATING' || s.status === 'PENDING')) {
+                saveWork({
+                    savedAt: Date.now(),
+                    stickerType,
+                    finalStickers: done,
+                    stickerPackageInfo,
+                    zipFileName,
+                    mainStickerId,
+                });
+            }
+        }
+    }, [appStep, finalStickers, stickerPackageInfo, zipFileName, mainStickerId, stickerType]);
+
+    const handleRestoreWork = () => {
+        if (!savedWork) return;
+        setStickerType(savedWork.stickerType);
+        setFinalStickers(savedWork.finalStickers);
+        setStickerPackageInfo(savedWork.stickerPackageInfo);
+        setZipFileName(savedWork.zipFileName || 'MyStickers');
+        setMainStickerId(savedWork.mainStickerId ?? savedWork.finalStickers[0]?.id ?? null);
+        setSavedWork(null);
+        setAppStep(AppStep.STICKER_PROCESSING);
+    };
+
+    const handleDiscardWork = () => {
+        setSavedWork(null);
+        clearWork();
+    };
 
 
 
@@ -518,8 +633,10 @@ export const App = () => {
                 setAppStep(AppStep.STICKER_CONFIG);
             }
         } else if (appStep === AppStep.STICKER_PROCESSING) {
-            setAppStep(AppStep.SHEET_EDITOR);
+            // Individual mode has no sheet to return to
+            setAppStep(rawSheetUrls.length > 0 ? AppStep.SHEET_EDITOR : AppStep.STICKER_CONFIG);
             setFinalStickers([]);
+            setStickerPackageInfo(null);
         }
     };
 
@@ -542,7 +659,7 @@ export const App = () => {
                     }
                 } catch (e) {
                     console.error(e);
-                    alert("圖片載入失敗");
+                    toast("圖片載入失敗", 'error');
                 } finally {
                     setIsProcessing(false);
                 }
@@ -579,7 +696,7 @@ export const App = () => {
             setGroupChars(prev => prev.map(c => c.id === id ? { ...c, description } : c));
         } catch (e) {
             console.error(e);
-            alert("分析失敗，請檢查 API Key 或網路連線");
+            toast("分析失敗，請檢查 API Key 或網路連線", 'error');
         } finally {
             setAnalyzingCharId(null);
         }
@@ -622,7 +739,7 @@ export const App = () => {
                     setAppStep(SHEET_EDITOR_STEP);
                 } catch (e) {
                     console.error(e);
-                    alert("底圖載入失敗");
+                    toast("底圖載入失敗", 'error');
                 } finally {
                     setIsProcessing(false);
                 }
@@ -665,13 +782,13 @@ export const App = () => {
                     }
                 });
                 setStickerConfigs(newConfigs);
-                alert(`已成功解析 ${ideas.length} 個貼圖設定並填入！`);
+                toast(`已成功解析 ${ideas.length} 個貼圖設定並填入！`, 'success');
             } else {
-                alert("無法解析內容。請確認格式是否為：1. 文字(中文指令)(English Prompt)");
+                toast("無法解析內容。請確認格式是否為：1. 文字(中文指令)(English Prompt)", 'error');
             }
         } catch (e) {
             console.error(e);
-            alert("解析失敗");
+            toast("解析失敗", 'error');
         } finally {
             setIsProcessing(false);
         }
@@ -687,7 +804,7 @@ export const App = () => {
             ));
         } catch (e) {
             console.error(e);
-            alert("翻譯失敗，請檢查網路");
+            toast("翻譯失敗，請檢查網路", 'error');
         } finally {
             setOptimizingId(null);
         }
@@ -703,7 +820,7 @@ export const App = () => {
             ));
         } catch (e) {
             console.error(e);
-            alert("優化失敗，請稍後再試");
+            toast("優化失敗，請稍後再試", 'error');
         } finally {
             setOptimizingId(null);
         }
@@ -717,7 +834,7 @@ export const App = () => {
             setPromptText(prompt);
         } catch (e) {
             console.error(e);
-            alert("靈感生成失敗，請再試一次");
+            toast("靈感生成失敗，請再試一次", 'error');
         } finally {
             setDiceLoading(false);
         }
@@ -731,7 +848,7 @@ export const App = () => {
             setPromptText(description);
         } catch (e) {
             console.error(e);
-            alert("描述生成失敗，請檢查網路連線");
+            toast("描述生成失敗，請檢查網路連線", 'error');
         } finally {
             setIsGeneratingDescription(false);
         }
@@ -743,14 +860,14 @@ export const App = () => {
         // Check validation for Group Mode
         if (inputMode === 'PHOTO') {
             // PHOTO Mode: Image is required, Description is OPTIONAL (from keyword input)
-            if (charCount > 1 && groupChars.some(c => !c.image)) return alert("請為所有角色上傳圖片！");
-            if (charCount === 1 && !sourceImage) return alert("請上傳圖片！");
+            if (charCount > 1 && groupChars.some(c => !c.image)) return toast("請為所有角色上傳圖片！", 'error');
+            if (charCount === 1 && !sourceImage) return toast("請上傳圖片！", 'error');
         } else if (!sourceImage && inputMode !== 'TEXT_PROMPT') {
             // EXISTING_IP or UPLOAD_SHEET: Image required
-            return alert("請先上傳圖片！");
+            return toast("請先上傳圖片！", 'error');
         } else if (inputMode === 'TEXT_PROMPT' && !promptText) {
             // TEXT_PROMPT: Prompt required
-            return alert("請輸入描述！");
+            return toast("請輸入描述！", 'error');
         }
 
         setIsProcessing(true);
@@ -827,10 +944,59 @@ export const App = () => {
             setAppStep(AppStep.CANDIDATE_SELECTION);
         } catch (error) {
             console.error(error);
-            alert("生成失敗，請稍後再試。");
+            toast("生成失敗，請稍後再試。", 'error');
         } finally {
             setIsProcessing(false);
         }
+    };
+
+    // Generates ONE sticker end-to-end (AI image -> green removal -> LINE-size
+    // canvas). Used by Individual mode and the per-sticker retry button.
+    const generateOneSticker = async (config: StickerConfig) => {
+        if (!generatedChar) return;
+        setFinalStickers(prev => prev.map(s => s.id === config.id ? { ...s, status: 'GENERATING' } : s));
+        try {
+            const effectiveConfig = { ...config, showText: config.showText && includeText };
+            const raw = await generateSingleSticker(generatedChar.url, effectiveConfig, stylePrompt, stickerType);
+            const clean = await processGreenScreenImage(raw);
+            const fitted = stickerType === 'EMOJI'
+                ? await fitImageToCanvas(clean, 180, 180, 'COVER', 0)
+                : await fitImageToCanvas(clean, 370, 320, 'CONTAIN', 2);
+            setFinalStickers(prev => prev.map(s => s.id === config.id ? { ...s, url: fitted, status: 'SUCCESS' } : s));
+        } catch (e) {
+            console.error(`[Individual] Sticker ${config.id} failed`, e);
+            setFinalStickers(prev => prev.map(s => s.id === config.id ? { ...s, status: 'ERROR' } : s));
+        }
+    };
+
+    const handleGenerateIndividual = async () => {
+        if (!generatedChar) return;
+        const initial: GeneratedImage[] = stickerConfigs.map(c => ({
+            id: c.id,
+            url: '',
+            type: stickerType,
+            status: 'PENDING',
+            emotion: c.text || c.emotionPromptCN || `#${c.id}`
+        }));
+        setFinalStickers(initial);
+        setMainStickerId(initial[0]?.id ?? null);
+        setStickerPackageInfo(null);
+        setRawSheetUrls([]);
+        setAppStep(AppStep.STICKER_PROCESSING);
+
+        // Small worker pool: 2 concurrent requests balances speed vs rate limits.
+        const queue = [...stickerConfigs];
+        const workers = Array.from({ length: 2 }, async () => {
+            for (let cfg = queue.shift(); cfg; cfg = queue.shift()) {
+                await generateOneSticker(cfg);
+            }
+        });
+        await Promise.all(workers);
+    };
+
+    const handleRetrySticker = (stickerId: string) => {
+        const cfg = stickerConfigs.find(c => c.id === stickerId);
+        if (cfg && generatedChar) generateOneSticker(cfg);
     };
 
     const handleGenerateStickers = async () => {
@@ -839,6 +1005,10 @@ export const App = () => {
             return;
         }
         if (!generatedChar) return;
+        if (genMode === 'INDIVIDUAL') {
+            await handleGenerateIndividual();
+            return;
+        }
         setIsProcessing(true);
         setLoadingMsg(t('generating'));
 
@@ -848,7 +1018,7 @@ export const App = () => {
             let stickersPerSheet: number = stickerQuantity;
             let layout: SheetLayout;
 
-            const spec = getStickerSpec(stickerQuantity);
+            const spec = stickerType === 'EMOJI' ? getEmojiSpec(stickerQuantity) : getStickerSpec(stickerQuantity);
             layout = { rows: spec.rows, cols: spec.cols, width: spec.width, height: spec.height };
 
             const batches = [];
@@ -881,7 +1051,7 @@ export const App = () => {
             setAppStep(SHEET_EDITOR_STEP);
         } catch (error) {
             console.error(error);
-            alert("生成失敗，請檢查網路連線或 API Key。");
+            toast("生成失敗，請檢查網路連線或 API Key。", 'error');
         } finally {
             setIsProcessing(false);
         }
@@ -890,7 +1060,7 @@ export const App = () => {
     const handleAutoProcess = async () => {
         if (rawSheetUrls.length === 0) return;
         if (!isOpenCVReady) {
-            alert("OpenCV 尚未載入完成，請稍候再試。");
+            toast("影像處理模組尚未載入完成，請稍候再試。", 'error');
             return;
         }
 
@@ -899,9 +1069,7 @@ export const App = () => {
 
         try {
             let allSlicedImages: string[] = [];
-            const targetW = 370;
-            const targetH = 320;
-            const spec = getStickerSpec(stickerQuantity);
+            const spec = stickerType === 'EMOJI' ? getEmojiSpec(stickerQuantity) : getStickerSpec(stickerQuantity);
             const rows = spec.rows;
             const cols = spec.cols;
 
@@ -920,7 +1088,7 @@ export const App = () => {
             }
 
             if (allSlicedImages.length === 0) {
-                alert("OpenCV 未偵測到任何物件，請確認背景是否為綠色。");
+                toast("未偵測到任何物件，請確認背景是否為綠色。", 'error');
                 setIsProcessing(false);
                 return;
             }
@@ -939,7 +1107,7 @@ export const App = () => {
 
         } catch (e) {
             console.error(e);
-            alert("自動處理失敗：" + (e as Error).message);
+            toast("自動處理失敗：" + (e as Error).message, 'error');
         } finally {
             setIsProcessing(false);
         }
@@ -976,7 +1144,7 @@ export const App = () => {
                 setMagicEditorOpen(false);
             }
         } catch (error) {
-            console.error(error); alert("修復失敗");
+            console.error(error); toast("修復失敗", 'error');
         } finally {
             setIsProcessing(false);
         }
@@ -984,13 +1152,11 @@ export const App = () => {
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text).then(() => {
-            alert("已複製到剪貼簿！");
+            toast("已複製到剪貼簿！", 'success');
         }).catch(err => {
             console.error('Failed to copy: ', err);
         });
     };
-
-    const currentSpec = STICKER_SPECS[stickerQuantity] || STICKER_SPECS[8];
 
     const handleFormatTextList = () => {
         if (!promptTextListInput.trim()) return;
@@ -1083,7 +1249,7 @@ export const App = () => {
             "邊框設計：文字與角色外圍皆需具備「細薄黑邊內層」，外層包覆「厚度適中的圓滑白色外框」。\n",
             "字型風格：【", vFont, "】\n\n",
             "[文字色彩]\n",
-            "絕對禁止使用錄色、螢光綠、黃綠色等接近背景綠幕的顏色，以免去背失效。絕對禁止黑色。\n\n",
+            "絕對禁止使用綠色、螢光綠、黃綠色等接近背景綠幕的顏色，以免去背失效。絕對禁止黑色。\n\n",
             "[表情與動作設計]\n",
             "表情參考：【喜、怒、哀、樂、驚訝、無語...】\n",
             "畫風設定：【", vArt, "】。\n\n",
@@ -1097,10 +1263,13 @@ export const App = () => {
     }, [promptSegments]);
 
     useEffect(() => {
-        if (appStep === AppStep.STICKER_PROCESSING && finalStickers.length > 0 && !stickerPackageInfo) {
+        if (appStep === AppStep.STICKER_PROCESSING && !stickerPackageInfo) {
+            // Wait until at least one sticker finished (Individual mode streams results in)
+            const mainSticker = finalStickers.find(s => s.id === mainStickerId && s.status === 'SUCCESS')
+                || finalStickers.find(s => s.status === 'SUCCESS');
+            if (!mainSticker) return;
             const generateInfo = async () => {
                 try {
-                    const mainSticker = finalStickers.find(s => s.id === mainStickerId) || finalStickers[0];
                     const texts = stickerConfigs.filter(c => c.showText).map(c => c.text);
                     const info = await generateStickerPackageInfo(mainSticker.url, texts);
                     setStickerPackageInfo(info);
@@ -1113,7 +1282,7 @@ export const App = () => {
 
 
     if (!hasKey) {
-        return <LandingPage onStart={setKeyAndStart} lang={sysLang} setLang={setSysLang} />;
+        return <LandingPage onStart={setKeyAndStart} />;
     }
 
     return (
@@ -1131,7 +1300,18 @@ export const App = () => {
                         </h1>
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                    {googleProfile && (
+                        <div className={`hidden sm:flex items-center gap-2 pl-1 pr-2 py-1 rounded-full ${theme === 'dark' ? 'bg-white/10 border border-white/10' : 'bg-slate-100'}`}>
+                            <img src={googleProfile.picture} alt={googleProfile.name} referrerPolicy="no-referrer" className="w-7 h-7 rounded-full" title={`${t('signedInAs')}: ${googleProfile.email}`} />
+                            <button
+                                onClick={handleSignOut}
+                                className={`text-[10px] font-bold ${theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-400 hover:text-slate-600'}`}
+                            >
+                                {t('signOut')}
+                            </button>
+                        </div>
+                    )}
                     <button
                         onClick={toggleTheme}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20 border border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'}`}
@@ -1151,7 +1331,15 @@ export const App = () => {
                 </div>
             </nav>
 
-            <main className="max-w-7xl mx-auto p-6 pt-24">
+            <Stepper
+                current={appStep === AppStep.UPLOAD || appStep === AppStep.CANDIDATE_SELECTION ? 0
+                    : appStep === AppStep.STICKER_CONFIG ? 1
+                        : appStep === AppStep.SHEET_EDITOR ? 2 : 3}
+                labels={[t('stepIP'), t('stepCopy'), t('stepSticker'), t('stepPack')]}
+                isDark={theme === 'dark'}
+            />
+
+            <main className="max-w-7xl mx-auto p-6 pt-10">
                 {appStep > AppStep.UPLOAD && (
                     <button
                         onClick={handleBack}
@@ -1169,6 +1357,24 @@ export const App = () => {
                         {/* ... (Previous code remains the same) ... */}
                         {!inputMode && (
                             <>
+                                {savedWork && (
+                                    <div className={`max-w-2xl mx-auto rounded-2xl border-2 p-4 flex flex-wrap items-center gap-4 animate-fade-in ${theme === 'dark' ? 'bg-white/10 border-indigo-400/40' : 'bg-indigo-50 border-indigo-200'}`}>
+                                        <div className="flex -space-x-3">
+                                            {savedWork.finalStickers.slice(0, 4).map(s => (
+                                                <img key={s.id} src={s.url} alt="" className="keep-light w-12 h-12 rounded-xl bg-white border-2 border-white shadow object-contain" />
+                                            ))}
+                                        </div>
+                                        <div className="flex-1 min-w-[140px]">
+                                            <p className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{t('resumeWorkTitle')}</p>
+                                            <p className={`text-xs ${theme === 'dark' ? 'text-indigo-200' : 'text-slate-500'}`}>{savedWork.finalStickers.length} {t('unitSheet')} · {new Date(savedWork.savedAt).toLocaleString()}</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={handleRestoreWork} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow transition-colors">{t('resumeWork')}</button>
+                                            <button onClick={handleDiscardWork} className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors ${theme === 'dark' ? 'text-white/50 hover:text-white hover:bg-white/10' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}>{t('discardWork')}</button>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="text-center space-y-4">
                                     <h2 className={`text-4xl font-black ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{t('mainTitle')}</h2>
                                     <p className={`text-lg ${theme === 'dark' ? 'text-indigo-200' : 'text-slate-500'}`}>{t('mainSubtitle')}</p>
@@ -1196,6 +1402,57 @@ export const App = () => {
                                         {t('emojiNote')}
                                     </div>
                                 )}
+
+                                {/* GENERATION ENGINE + QUALITY / COST SWITCHER */}
+                                <div className="flex flex-col items-center gap-2 mb-4">
+                                    {(openaiAvailable || hfAvailable) && (
+                                        <div className={`p-1 rounded-xl flex gap-1 text-xs ${theme === 'dark' ? 'bg-black/40 border border-white/10' : 'bg-slate-200'}`}>
+                                            <button
+                                                onClick={() => handleEngineChange('GEMINI')}
+                                                className={`px-4 py-1.5 rounded-lg font-bold transition-all ${imageEngine === 'GEMINI' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-blue-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
+                                            >
+                                                {t('engineGemini')}
+                                            </button>
+                                            {openaiAvailable && (
+                                                <button
+                                                    onClick={() => handleEngineChange('OPENAI')}
+                                                    className={`px-4 py-1.5 rounded-lg font-bold transition-all ${imageEngine === 'OPENAI' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-teal-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
+                                                >
+                                                    {t('engineOpenAI')}
+                                                </button>
+                                            )}
+                                            {hfAvailable && (
+                                                <button
+                                                    onClick={() => handleEngineChange('HF')}
+                                                    className={`px-4 py-1.5 rounded-lg font-bold transition-all ${imageEngine === 'HF' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-amber-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
+                                                >
+                                                    {t('engineHF')}
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                    <div className={`p-1 rounded-xl gap-1 text-xs ${imageEngine === 'HF' ? 'hidden' : 'flex'} ${theme === 'dark' ? 'bg-black/40 border border-white/10' : 'bg-slate-200'}`}>
+                                        <button
+                                            onClick={() => handleQualityChange('QUALITY')}
+                                            className={`px-4 py-1.5 rounded-lg font-bold transition-all ${genQuality === 'QUALITY' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-indigo-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
+                                        >
+                                            💎 {t('qualityPro')}
+                                        </button>
+                                        <button
+                                            onClick={() => handleQualityChange('ECONOMY')}
+                                            className={`px-4 py-1.5 rounded-lg font-bold transition-all ${genQuality === 'ECONOMY' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-emerald-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
+                                        >
+                                            🪙 {t('qualityEco')}
+                                        </button>
+                                    </div>
+                                    <p className={`text-[11px] max-w-lg text-center ${theme === 'dark' ? 'text-indigo-300/70' : 'text-slate-400'}`}>
+                                        {imageEngine === 'HF'
+                                            ? t('engineHFHint')
+                                            : imageEngine === 'OPENAI'
+                                                ? (genQuality === 'QUALITY' ? t('qualityProHintOpenAI') : t('qualityEcoHintOpenAI'))
+                                                : (genQuality === 'QUALITY' ? t('qualityProHint') : t('qualityEcoHint'))}
+                                    </p>
+                                </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-12">
                                     <div onClick={() => { setInputMode('PHOTO'); setCharCount(1); }} className={`cursor-pointer p-8 rounded-3xl border-2 hover:-translate-y-1 transition-all group ${theme === 'dark' ? 'bg-white/10 border-white/10 hover:border-indigo-400 hover:bg-white/15 backdrop-blur-md shadow-lg ring-1 ring-white/5' : 'bg-white border-white hover:border-indigo-500 hover:shadow-xl'}`}>
@@ -1434,7 +1691,7 @@ export const App = () => {
                                                         className="w-full p-4 rounded-2xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-pink-500 outline-none font-medium text-lg min-h-[200px]"
                                                         placeholder={t('charDescPlaceholder')}
                                                     />
-                                                    <div className="absolute bottom-4 right-4 relative">
+                                                    <div className="absolute bottom-4 right-4">
                                                         <button
                                                             onClick={() => setShowDiceMenu(!showDiceMenu)}
                                                             disabled={diceLoading}
@@ -1532,7 +1789,7 @@ export const App = () => {
                                                                         />
                                                                         <span className="text-indigo-600 font-black text-xl w-12 text-right">{promptGenQuantity}</span>
                                                                     </div>
-                                                                    <p className="text-[10px] text-slate-400 mt-1">{t('promptGenGrid')}: {STICKER_SPECS[promptGenQuantity]?.cols}x{STICKER_SPECS[promptGenQuantity]?.rows} ({STICKER_SPECS[promptGenQuantity]?.width}x{STICKER_SPECS[promptGenQuantity]?.height}px)</p>
+                                                                    <p className="text-[10px] text-slate-400 mt-1">{t('promptGenGrid')}: {promptSpec.cols}x{promptSpec.rows} ({promptSpec.width}x{promptSpec.height}px)</p>
                                                                 </div>
                                                                 <div>
                                                                     <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('promptGenStyle')}</label>
@@ -1606,7 +1863,7 @@ export const App = () => {
                                 {/* Fixed Height Container to prevent full-screen takeover */}
                                 <div className="w-full h-[50vh] flex items-center justify-center bg-gray-50 rounded-2xl relative group border border-slate-100 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgBDAm9BGDWAAJyRCgLaBCAAgXwixzAS0pgAAAABJRU5ErkJggg==')]">
                                     <img src={generatedChar.url} alt="Character" className="h-full w-full object-contain shadow-lg" />
-                                    <button onClick={handleGenerateCharacter} className="absolute top-4 right-4 bg-white/90 backdrop-blur text-slate-700 px-4 py-2 rounded-full font-bold shadow-md hover:bg-white hover:text-indigo-600 transition-all flex items-center gap-2">
+                                    <button onClick={handleGenerateCharacter} className="keep-light absolute top-4 right-4 bg-white/90 backdrop-blur text-slate-700 px-4 py-2 rounded-full font-bold shadow-md hover:bg-white hover:text-indigo-600 transition-all flex items-center gap-2">
                                         <RefreshIcon /> {t('retryGenerate')}
                                     </button>
                                 </div>
@@ -1631,12 +1888,36 @@ export const App = () => {
                                     <h2 className="text-3xl font-black text-slate-800">{t('configTitle')} 📝</h2>
                                     <p className="text-slate-500 mt-2">{t('configSubtitle')}</p>
                                 </div>
-                                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex gap-4 items-center">
+                                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center">
                                     <div className="flex gap-2 items-center">
                                         <span className="text-xs font-bold text-slate-400">{t('quantityLabel')}</span>
                                         <select value={stickerQuantity} onChange={(e) => handleQuantityChange(Number(e.target.value) as StickerQuantity)} className="bg-slate-50 border-none rounded-lg font-bold text-slate-700 focus:ring-2 focus:ring-indigo-200 py-2">
                                             {validQuantities.map(n => <option key={n} value={n}>{n} {t('unitSheet')}</option>)}
                                         </select>
+                                    </div>
+                                    <div className="flex gap-2 items-center">
+                                        <span className={`text-[11px] font-bold px-2 py-1 rounded-lg ${genMode === 'INDIVIDUAL' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`} title={genMode === 'INDIVIDUAL' ? t('genModeSingleHint') : t('genModeSheetHint')}>
+                                            💰 {t('costEstimate')}: ~{estimatedCost}
+                                        </span>
+                                    </div>
+                                    <div className="flex gap-2 items-center">
+                                        <span className="text-xs font-bold text-slate-400">{t('genModeLabel')}</span>
+                                        <div className="flex bg-slate-100 p-1 rounded-lg">
+                                            <button
+                                                onClick={() => handleGenModeChange('SHEET')}
+                                                title={t('genModeSheetHint')}
+                                                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${genMode === 'SHEET' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                            >
+                                                🧩 {t('genModeSheet')}
+                                            </button>
+                                            <button
+                                                onClick={() => handleGenModeChange('INDIVIDUAL')}
+                                                title={t('genModeSingleHint')}
+                                                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${genMode === 'INDIVIDUAL' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                            >
+                                                🎯 {t('genModeSingle')}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1796,12 +2077,12 @@ export const App = () => {
                                             {t('generateTabThumb')}
                                         </button>
                                     )}
-                                    <button onClick={() => generateFrameZip(finalStickers, zipFileName || "MyStickers", finalStickers.find(s => s.id === mainStickerId)?.url, stickerPackageInfo || undefined, stickerType)} className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform hover:-translate-y-1 whitespace-nowrap"><DownloadIcon /> {t('downloadAll')}</button>
+                                    <button onClick={() => { const done = finalStickers.filter(s => s.status === 'SUCCESS'); if (done.length === 0) return; generateFrameZip(done, zipFileName || "MyStickers", done.find(s => s.id === mainStickerId)?.url, stickerPackageInfo || undefined, stickerType); }} className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform hover:-translate-y-1 whitespace-nowrap"><DownloadIcon /> {t('downloadAll')}</button>
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
                                 {finalStickers.map((sticker, idx) => (
-                                    <StickerCard key={sticker.id} sticker={sticker} countdown={0} isMain={sticker.id === mainStickerId} onRetry={() => { }} onDownload={() => { const a = document.createElement('a'); a.href = sticker.url; a.download = `sticker_${idx + 1}.png`; a.click(); }} onEdit={() => handleMagicEdit(sticker.id)} onSetMain={() => setMainStickerId(sticker.id)} />
+                                    <StickerCard key={sticker.id} sticker={sticker} countdown={0} isMain={sticker.id === mainStickerId} onRetry={() => handleRetrySticker(sticker.id)} onDownload={() => { const a = document.createElement('a'); a.href = sticker.url; a.download = `sticker_${idx + 1}.png`; a.click(); }} onEdit={() => handleMagicEdit(sticker.id)} onSetMain={() => setMainStickerId(sticker.id)} />
                                 ))}
                             </div>
                             {stickerPackageInfo && (

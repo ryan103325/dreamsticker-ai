@@ -3,14 +3,80 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { GeneratedImage, StickerConfig, InputMode, StickerType, FontConfig, SheetLayout, getStickerSpec, StickerPackageInfo, STICKER_SPECS, ArtisticFilterType, CharacterInput } from "../types";
 import { stripMimeType, getMimeType, wait } from "./utils";
 
-// Model Definitions
-const IP_DESIGN_MODEL = 'gemini-3-pro-image-preview';
-const STICKER_GEN_MODEL_PRO = 'gemini-3-pro-image-preview';
-const STICKER_GEN_MODEL_FLASH = 'gemini-2.5-flash-image';
-const TEXT_MODEL = 'gemini-2.5-flash';
-const VALIDATION_MODEL = 'gemini-2.5-flash-image'; // Used for QA check
+// --- Model Configuration -----------------------------------------------
+// Centralized so model deprecations only need a change here (or an env
+// override at build time, without touching code).
+//
+// Current defaults (July 2026):
+// - gemini-3-pro-image      (Nano Banana Pro, GA): best complex layout & typography
+// - gemini-3.1-flash-image  (Nano Banana 2, GA): fast/cheap, up to 4K
+// - gemini-2.5-flash-image  legacy last-resort fallback
+const IMAGE_MODEL_PRO = import.meta.env.VITE_IMAGE_MODEL_PRO || 'gemini-3-pro-image';
+const IMAGE_MODEL_FLASH = import.meta.env.VITE_IMAGE_MODEL_FLASH || 'gemini-3.1-flash-image';
+const IMAGE_MODEL_LEGACY = import.meta.env.VITE_IMAGE_MODEL_LEGACY || 'gemini-2.5-flash-image';
+const TEXT_MODEL = import.meta.env.VITE_TEXT_MODEL || 'gemini-2.5-flash';
+const VALIDATION_MODEL = TEXT_MODEL; // Vision QA needs JSON output -> text model with vision
 
-import { saveApiKey, loadApiKey } from "./storageUtils";
+// Quality mode: 'QUALITY' uses the Pro image model (better layout adherence,
+// ~2x the cost). 'ECONOMY' uses Flash Image for everything.
+// Either way, failures automatically fall back down the chain.
+export type QualityMode = 'QUALITY' | 'ECONOMY';
+const QUALITY_MODE_KEY = 'gen_quality_mode';
+
+let qualityMode: QualityMode = (() => {
+    try {
+        const stored = typeof window !== 'undefined' ? localStorage.getItem(QUALITY_MODE_KEY) : null;
+        return stored === 'ECONOMY' ? 'ECONOMY' : 'QUALITY';
+    } catch { return 'QUALITY'; }
+})();
+
+export const getQualityMode = (): QualityMode => qualityMode;
+export const setQualityMode = (mode: QualityMode) => {
+    qualityMode = mode;
+    try { localStorage.setItem(QUALITY_MODE_KEY, mode); } catch { /* private mode */ }
+};
+
+// Image engine: Google Gemini (default), OpenAI GPT Image (optional,
+// requires a verified-organization OpenAI key), or Hugging Face open models
+// (optional, requires a free HF token; Qwen-Image family by default).
+export type ImageEngine = 'GEMINI' | 'OPENAI' | 'HF';
+const IMAGE_ENGINE_KEY = 'image_engine';
+
+let imageEngine: ImageEngine = (() => {
+    try {
+        const stored = typeof window !== 'undefined' ? localStorage.getItem(IMAGE_ENGINE_KEY) : null;
+        return stored === 'OPENAI' ? 'OPENAI' : stored === 'HF' ? 'HF' : 'GEMINI';
+    } catch { return 'GEMINI'; }
+})();
+
+export const getImageEngine = (): ImageEngine => imageEngine;
+export const setImageEngine = (engine: ImageEngine) => {
+    imageEngine = engine;
+    try { localStorage.setItem(IMAGE_ENGINE_KEY, engine); } catch { /* private mode */ }
+};
+
+// Ordered candidate list for image generation: primary first, fallbacks after.
+const getImageModelChain = (): string[] => {
+    if (qualityMode === 'ECONOMY') return [IMAGE_MODEL_FLASH, IMAGE_MODEL_LEGACY];
+    return [IMAGE_MODEL_PRO, IMAGE_MODEL_FLASH, IMAGE_MODEL_LEGACY];
+};
+
+// imageSize (1K/2K/4K) is supported by the Gemini 3 generation image models;
+// the legacy 2.5 flash image model renders 1024px only.
+const buildImageConfig = (model: string, opts: { aspectRatio?: string; imageSize?: string }) => {
+    const config: Record<string, string> = {};
+    if (opts.aspectRatio) config.aspectRatio = opts.aspectRatio;
+    if (opts.imageSize && model.startsWith('gemini-3')) config.imageSize = opts.imageSize;
+    return config;
+};
+// -----------------------------------------------------------------------
+
+import { loadApiKey } from "./storageUtils";
+import { openaiGenerateImage, OpenAIAspect } from "./openaiImageService";
+import { hfGenerateImage } from "./hfImageService";
+
+// Maps the app-wide quality mode onto OpenAI's quality parameter.
+const openaiQuality = (): 'high' | 'medium' => (qualityMode === 'QUALITY' ? 'high' : 'medium');
 
 // Helper to get a fresh AI instance with the current key
 let dynamicApiKey = '';
@@ -370,6 +436,29 @@ export const generateIPCharacter = async (sourceImageDataUrl: string, style: str
        - ** ENSURE FULL BODY VISIBILITY.**
     `;
 
+    const ipPrompt = inputMode === 'TEXT_PROMPT'
+        ? `Create unique IP character: "${sourceImageDataUrl}".\n${coreRequirements}`
+        : `Transform the reference image into an IP character.\n${coreRequirements}`;
+
+    if (getImageEngine() === 'OPENAI') {
+        const url = await openaiGenerateImage({
+            prompt: ipPrompt,
+            images: inputMode === 'TEXT_PROMPT' ? undefined : [sourceImageDataUrl],
+            aspect: '1:1',
+            quality: openaiQuality(),
+        });
+        return { id: `char-${Date.now()}`, url, type: 'STATIC' };
+    }
+
+    if (getImageEngine() === 'HF') {
+        const url = await hfGenerateImage({
+            prompt: ipPrompt,
+            image: inputMode === 'TEXT_PROMPT' ? undefined : sourceImageDataUrl,
+            aspect: '1:1',
+        });
+        return { id: `char-${Date.now()}`, url, type: 'STATIC' };
+    }
+
     let parts: any[] = [];
     if (inputMode === 'TEXT_PROMPT') {
         parts = [{ text: `Create unique IP character: "${sourceImageDataUrl}".\n${coreRequirements} ` }];
@@ -377,17 +466,27 @@ export const generateIPCharacter = async (sourceImageDataUrl: string, style: str
         parts = [{ inlineData: { mimeType: getMimeType(sourceImageDataUrl), data: stripMimeType(sourceImageDataUrl) } }, { text: `Transform IP character.\n${coreRequirements} ` }];
     }
 
-    return callWithRetry(async () => {
-        const response = await ai.models.generateContent({
-            model: IP_DESIGN_MODEL,
-            contents: { parts },
-            config: { imageConfig: { aspectRatio: "1:1" } }
-        });
-        validateResponse(response);
-        const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!part?.inlineData?.data) throw new Error("No image data.");
-        return { id: `char - ${Date.now()} `, url: `data: image / png; base64, ${part.inlineData.data} `, type: 'STATIC' };
-    });
+    const models = getImageModelChain();
+    let lastError: unknown = null;
+    for (const model of models) {
+        try {
+            return await callWithRetry(async () => {
+                const response = await ai.models.generateContent({
+                    model,
+                    contents: { parts },
+                    config: { imageConfig: buildImageConfig(model, { aspectRatio: "1:1" }) }
+                });
+                validateResponse(response);
+                const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                if (!part?.inlineData?.data) throw new Error("No image data.");
+                return { id: `char-${Date.now()}`, url: `data:image/png;base64,${part.inlineData.data}`, type: 'STATIC' as const };
+            });
+        } catch (e) {
+            console.warn(`[generateIPCharacter] ${model} failed, trying next model...`, e);
+            lastError = e;
+        }
+    }
+    throw lastError;
 };
 
 /**
@@ -415,7 +514,7 @@ export const analyzeImageForCharacterDescription = async (base64Image: string): 
 
     return callWithRetry(async () => {
         const response = await ai.models.generateContent({
-            model: STICKER_GEN_MODEL_FLASH, // Flash is sufficient for vision analysis
+            model: TEXT_MODEL, // Vision analysis outputs text -> text model is cheaper
             contents: {
                 parts: [
                     { inlineData: { mimeType: getMimeType(base64Image), data: stripMimeType(base64Image) } },
@@ -577,27 +676,55 @@ export const generateGroupCharacterSheet = async (
 
     parts.push({ text: systemPrompt });
 
-    return callWithRetry(async () => {
-        const response = await ai.models.generateContent({
-            model: STICKER_GEN_MODEL_PRO, // Use Pro for complex layout adherence and 4K
-            contents: { parts },
-            config: {
-                imageConfig: {
-                    aspectRatio: "16:9",
-                    imageSize: "4K"
-                }
-            }
+    if (getImageEngine() === 'OPENAI') {
+        const url = await openaiGenerateImage({
+            prompt: systemPrompt,
+            images: validImages.map(c => c.image!),
+            aspect: '16:9',
+            quality: openaiQuality(),
         });
-        validateResponse(response);
-        const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!part?.inlineData?.data) throw new Error("No image data.");
+        return { id: `group-${Date.now()}`, url, type: 'STATIC' };
+    }
 
-        return {
-            id: `group - ${Date.now()} `,
-            url: `data: image / png; base64, ${part.inlineData.data} `,
-            type: 'STATIC'
-        };
-    });
+    if (getImageEngine() === 'HF') {
+        // HF edit models accept a single reference image; remaining characters
+        // are described in the prompt only.
+        const url = await hfGenerateImage({
+            prompt: systemPrompt,
+            image: validImages[0]?.image,
+            aspect: '16:9',
+        });
+        return { id: `group-${Date.now()}`, url, type: 'STATIC' };
+    }
+
+    const models = getImageModelChain();
+    let lastError: unknown = null;
+    for (const model of models) {
+        try {
+            return await callWithRetry(async () => {
+                const response = await ai.models.generateContent({
+                    model, // Pro preferred for complex layout adherence and 4K
+                    contents: { parts },
+                    config: {
+                        imageConfig: buildImageConfig(model, { aspectRatio: "16:9", imageSize: "4K" })
+                    }
+                });
+                validateResponse(response);
+                const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                if (!part?.inlineData?.data) throw new Error("No image data.");
+
+                return {
+                    id: `group-${Date.now()}`,
+                    url: `data:image/png;base64,${part.inlineData.data}`,
+                    type: 'STATIC' as const
+                };
+            });
+        } catch (e) {
+            console.warn(`[generateGroupCharacterSheet] ${model} failed, trying next model...`, e);
+            lastError = e;
+        }
+    }
+    throw lastError;
 };
 
 export const generateStickerSheet = async (characterUrl: string, configs: StickerConfig[], style: string, sheetIndex: number, totalSheets: number, layout?: SheetLayout, fontConfig?: FontConfig, stickerType: StickerType = 'STATIC'): Promise<{ url: string }> => {
@@ -691,32 +818,128 @@ Spacing: Ensure > 3 % green gap between all stickers(Vertical & Horizontal).
         `;
     }
 
-    // Static Generation Loop
-    let attempts = 0;
-    while (attempts < 3) {
+    if (getImageEngine() === 'OPENAI') {
+        const url = await openaiGenerateImage({
+            prompt: basePrompt,
+            images: [characterUrl],
+            aspect: bestAR as OpenAIAspect,
+            quality: openaiQuality(),
+        });
+        return { url };
+    }
+
+    if (getImageEngine() === 'HF') {
+        const url = await hfGenerateImage({
+            prompt: basePrompt,
+            image: characterUrl,
+            aspect: bestAR,
+        });
+        return { url };
+    }
+
+    // Static Generation Loop: retry primary model, then fall back to the next
+    // model in the chain (QUALITY: Pro -> Flash; ECONOMY: Flash only).
+    const chain = getImageModelChain();
+    const attemptModels = chain.length > 1 ? [chain[0], chain[0], chain[1]] : [chain[0], chain[0], chain[0]];
+
+    for (const model of attemptModels) {
         try {
             const response = await ai.models.generateContent({
-                model: STICKER_GEN_MODEL_PRO,
+                model,
                 contents: { parts: [{ inlineData: { mimeType: 'image/png', data: base64Char } }, { text: basePrompt }] },
-                // Use 2K Resolution for Static Sheets to save tokens and time
-                config: { imageConfig: { aspectRatio: bestAR, imageSize: "2K" } }
+                // 2K resolution for static sheets to save tokens and time (Pro only)
+                config: { imageConfig: buildImageConfig(model, { aspectRatio: bestAR, imageSize: "2K" }) }
             });
             validateResponse(response);
             const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
             if (!part?.inlineData?.data) throw new Error("No data");
-            const finalUrl = `data: image / png; base64, ${part.inlineData.data} `;
+            const finalUrl = `data:image/png;base64,${part.inlineData.data}`;
 
             // Level 1 Check
             const valid = await validateImageDimensions(finalUrl, targetRatio);
             if (valid) return { url: finalUrl };
-            attempts++;
         } catch (e) {
-            console.error(e);
-            attempts++;
+            console.warn(`[generateStickerSheet] ${model} attempt failed`, e);
             await wait(1000);
         }
     }
     throw new Error("Failed to generate static sheet.");
+};
+
+/**
+ * PER-STICKER GENERATION (Individual mode)
+ * Generates ONE sticker on a green screen from the character reference.
+ * Compared to the big-sheet approach this costs more per set but removes the
+ * grid-slicing failure mode entirely and allows per-sticker retry.
+ */
+export const generateSingleSticker = async (
+    characterUrl: string,
+    config: StickerConfig,
+    style: string,
+    stickerType: StickerType = 'STATIC'
+): Promise<string> => {
+    const textRule = config.showText && config.text
+        ? `**TEXT:** Render the caption "${config.text}" in Traditional Chinese as a physical object the character INTERACTS with (holding, leaning, sitting on). Bubble/pop-art typography, thin black inner outline + thick white outer outline. Text must NOT be green or black, must NOT cover the face.`
+        : `**TEXT:** Do NOT render any text.`;
+
+    const outlineRule = stickerType === 'EMOJI'
+        ? `**STYLE:** LINE emoji (small 180px target). Bold clear lines, no white sticker border, character fills the frame (full bleed) while keeping a thin green margin on all sides.`
+        : `**STYLE:** LINE sticker. Add a thick (15px) solid WHITE sticker outline around the character and text.`;
+
+    const prompt = `
+Draw EXACTLY ONE sticker of the reference character on a pure solid green (#00FF00) background.
+
+**ACTION / EMOTION:** ${config.emotionPrompt}${config.emotionPromptCN ? ` (${config.emotionPromptCN})` : ''}
+${textRule}
+${outlineRule}
+
+**RULES:**
+1. Keep the reference character's design, colors and proportions EXACTLY consistent.
+2. Background: 100% pure green #00FF00, no gradients, no shadows on the background, no frame or border lines.
+3. Never use green (#00FF00 or similar) inside the artwork. Fading effects must fade to WHITE, never to green.
+4. Single centered composition with a clear green margin (at least 5% of the canvas) on all sides.
+5. Art style: ${style}.
+`;
+
+    // COST GUARDRAIL: a single sticker's final size is only 370x320 (or
+    // 180x180), so the Pro model / high quality is wasted here. Individual
+    // mode always uses the cheapest capable tier regardless of quality mode:
+    // per-image cost is paid N times per set (vs once for a grid sheet).
+    if (getImageEngine() === 'OPENAI') {
+        return openaiGenerateImage({
+            prompt,
+            images: [characterUrl],
+            aspect: '1:1',
+            quality: 'medium',
+        });
+    }
+
+    if (getImageEngine() === 'HF') {
+        return hfGenerateImage({ prompt, image: characterUrl, aspect: '1:1' });
+    }
+
+    const ai = getAI();
+    const models = [IMAGE_MODEL_FLASH, IMAGE_MODEL_LEGACY];
+    let lastError: unknown = null;
+    for (const model of models) {
+        try {
+            return await callWithRetry(async () => {
+                const response = await ai.models.generateContent({
+                    model,
+                    contents: { parts: [{ inlineData: { mimeType: 'image/png', data: stripMimeType(characterUrl) } }, { text: prompt }] },
+                    config: { imageConfig: buildImageConfig(model, { aspectRatio: "1:1", imageSize: "1K" }) }
+                });
+                validateResponse(response);
+                const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                if (!part?.inlineData?.data) throw new Error("No image data.");
+                return `data:image/png;base64,${part.inlineData.data}`;
+            }, 1);
+        } catch (e) {
+            console.warn(`[generateSingleSticker] ${model} failed, trying next model...`, e);
+            lastError = e;
+        }
+    }
+    throw lastError;
 };
 
 export const editSticker = async (markedImage: string, prompt: string): Promise<GeneratedImage> => {
@@ -738,28 +961,41 @@ export const editSticker = async (markedImage: string, prompt: string): Promise<
     5. ** COLOR SAFETY **: Do NOT use bright green in the new content.If generating effects, fade to WHITE, not green.
     `;
 
-    // Pro -> Flash Fallback
-    try {
-        const response = await ai.models.generateContent({
-            model: STICKER_GEN_MODEL_PRO,
-            contents: { parts: [{ inlineData: { mimeType: 'image/png', data: base64Data } }, { text: editPrompt }] },
-            config: { imageConfig: { imageSize: "4K" } }
+    if (getImageEngine() === 'OPENAI') {
+        const url = await openaiGenerateImage({
+            prompt: editPrompt,
+            images: [markedImage],
+            aspect: 'auto',
+            quality: openaiQuality(),
         });
-        validateResponse(response);
-        const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!part?.inlineData?.data) throw new Error("No data");
-        return { id: `edited - ${Date.now()} `, url: `data: image / png; base64, ${part.inlineData.data} `, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
-    } catch (e) {
-        const response = await ai.models.generateContent({
-            model: STICKER_GEN_MODEL_FLASH,
-            contents: { parts: [{ inlineData: { mimeType: 'image/png', data: base64Data } }, { text: editPrompt }] },
-            config: { imageConfig: {} }
-        });
-        validateResponse(response);
-        const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!part?.inlineData?.data) throw new Error("Edit failed.");
-        return { id: `edited - ${Date.now()} `, url: `data: image / png; base64, ${part.inlineData.data} `, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
+        return { id: `edited-${Date.now()}`, url, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
     }
+
+    if (getImageEngine() === 'HF') {
+        const url = await hfGenerateImage({ prompt: editPrompt, image: markedImage, aspect: 'auto' });
+        return { id: `edited-${Date.now()}`, url, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
+    }
+
+    // Model chain fallback (QUALITY: Pro -> Flash; ECONOMY: Flash only)
+    const models = getImageModelChain();
+    let lastError: unknown = null;
+    for (const model of models) {
+        try {
+            const response = await ai.models.generateContent({
+                model,
+                contents: { parts: [{ inlineData: { mimeType: 'image/png', data: base64Data } }, { text: editPrompt }] },
+                config: { imageConfig: buildImageConfig(model, { imageSize: "4K" }) }
+            });
+            validateResponse(response);
+            const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+            if (!part?.inlineData?.data) throw new Error("Edit failed.");
+            return { id: `edited-${Date.now()}`, url: `data:image/png;base64,${part.inlineData.data}`, type: 'STATIC', status: 'SUCCESS', emotion: 'Edited' };
+        } catch (e) {
+            console.warn(`[editSticker] ${model} failed, trying next model...`, e);
+            lastError = e;
+        }
+    }
+    throw lastError;
 };
 
 export const restyleSticker = async (imageUrl: string, filter: ArtisticFilterType): Promise<GeneratedImage> => {
@@ -768,14 +1004,14 @@ export const restyleSticker = async (imageUrl: string, filter: ArtisticFilterTyp
     const prompt = `Redraw in ${filter} style.Maintain pose / comp.Keep 15px white border.`;
 
     const response = await ai.models.generateContent({
-        model: STICKER_GEN_MODEL_FLASH,
+        model: IMAGE_MODEL_FLASH,
         contents: { parts: [{ inlineData: { mimeType: 'image/png', data: stripMimeType(imageUrl) } }, { text: prompt }] },
         config: { imageConfig: {} }
     });
     validateResponse(response);
     const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
     if (!part?.inlineData?.data) throw new Error("Restyle failed.");
-    return { id: `restyle - ${Date.now()} `, url: `data: image / png; base64, ${part.inlineData.data} `, type: 'STATIC', status: 'SUCCESS', emotion: filter };
+    return { id: `restyle-${Date.now()}`, url: `data:image/png;base64,${part.inlineData.data}`, type: 'STATIC', status: 'SUCCESS', emotion: filter };
 };
 
 /**
@@ -867,7 +1103,7 @@ export const generateSimpleIcons = async (
     1. Output strictly a comma-separated list of keywords.
     2. No numbering, no bullet points, no extra text.
     3. Language: Traditional Chinese (繁體中文).
-    4. Example output: 開心, 難過, 生氣, 驚安, 困惑, 睡覺, ...
+    4. Example output: 開心, 難過, 生氣, 驚訝, 困惑, 睡覺, ...
     `;
 
     const response = await ai.models.generateContent({
