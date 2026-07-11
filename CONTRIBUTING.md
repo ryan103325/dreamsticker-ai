@@ -36,9 +36,18 @@ src/
 ## 送 PR 前 / Before You Submit
 
 1. `npm run typecheck` 與 `npm run build` 必須通過。
-2. UI 文案改動需同步 `i18n.ts` 的 zh 與 en 兩個區塊。
+2. UI 文案改動需同步 `i18n.ts` 的 zh 與 en 兩個區塊（`npm run check:i18n` 會驗證）。
 3. 色彩請使用既有的調色盤（`src/index.css` 的 `@theme` 區塊），避免引入新色相。
 4. 涉及生圖 prompt 的改動，請在 PR 描述附上實測結果截圖。
+
+## 圖示規範 / Icon Convention
+
+這是刻意的風格決策（deliberate style decision），請勿引入 icon 庫（lucide 等）：
+
+- **功能性圖示**（按鈕上的操作符號：下載、編輯、關閉…）：使用 `src/components/Icons.tsx` 的 SVG 元件。
+- **裝飾性 / 情境圖示**（卡片主視覺、標題點綴、狀態表情：📸🖼️📝📂✨💡…）：一律使用 emoji。
+
+Functional icons = SVG components in `src/components/Icons.tsx`; decorative/contextual icons = emoji. Do not add an icon library.
 
 ## 回報問題 / Reporting Issues
 

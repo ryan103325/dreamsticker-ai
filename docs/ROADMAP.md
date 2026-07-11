@@ -145,7 +145,7 @@ interface PlatformSpec {
 - [x] **Service Worker / PWA 完成**：離線殼層 + 資源快取（生成功能離線無意義，但 app 殼要能開）。完成後手機「加入主畫面」即類原生體驗。
 - [x] **CI 加 typecheck**：deploy.yml 的 build 前加 `npm run typecheck`（現在 vite build 不做型別檢查）。
 - [x] **生成等待體驗**：全屏 Loader 改為階段式進度（分析 → 構圖 → 上色 → 切割），逐張模式已有卡片狀態可參考。
-- [ ] **icon 系統化**：emoji 圖示（📸🖼️📝📂）換 `lucide-react`（或保留 emoji 作為風格決策，二擇一並統一）。
+- [x] **icon 系統化**：已定案「保留 emoji」作為風格決策（規範見 CONTRIBUTING.md）：功能性圖示用 `src/components/Icons.tsx` 的 SVG，裝飾性/情境圖示一律用 emoji，不引入 icon 庫。
 - [x] **手機 RWD**:固定底欄遮內容問題、navbar 小螢幕擁擠。
 - [ ] **錯誤回報**：接 Sentry（免費額度夠用）；GA4 或 PostHog 基本埋點（頁面、生成成功率、引擎分佈）。
 - [x] **i18n 檢查腳本**：`scripts/check-i18n.mjs` 掃描 `t('...')` 用量 vs 字典，缺鍵時 CI 失敗（歷史上發生過 39 個鍵缺失直接顯示鍵名的事故）。
