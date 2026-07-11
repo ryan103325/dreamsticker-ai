@@ -1,6 +1,8 @@
 
 import JSZip from 'jszip';
-import { FontConfig, StickerPackageInfo, ArtisticFilterType } from '../types';
+import { StickerPackageInfo, ArtisticFilterType } from '../types';
+import { PlatformSpec, PLATFORMS } from '../platforms';
+import { encodeWithBudget, dataUrlToCanvas } from './encode';
 
 const WORKER_SCRIPT = `
 // --- 核心距離計算函數 ---
@@ -397,56 +399,62 @@ export const generateTabImage = async (sourceUrl: string): Promise<string> => {
     });
 };
 
-export const generateFrameZip = async (stickers: any[], zipName: string, mainStickerUrl?: string, packageInfo?: StickerPackageInfo, type: 'STATIC' | 'EMOJI' = 'STATIC') => {
+/**
+ * Packages the finished stickers for the target platform: numbered files in
+ * the platform's format (with per-file byte budgets), derived extras
+ * (main/tab/tray icons), a README.txt with publishing instructions, and the
+ * metadata info.txt. Returns the names of any files that could not be
+ * squeezed under the platform's size limit so the UI can warn.
+ */
+export const generateFrameZip = async (
+    stickers: Array<{ url: string }>,
+    zipName: string,
+    mainStickerUrl?: string,
+    packageInfo?: StickerPackageInfo,
+    platform: PlatformSpec = PLATFORMS.LINE_STICKER
+): Promise<{ oversized: string[] }> => {
     const zip = new JSZip();
     const folder = zip.folder(zipName) || zip;
-    const getBlob = async (url: string) => (await fetch(url)).blob();
+    const oversized: string[] = [];
 
-    // 1. Add Stickers
+    // 1. Stickers, re-encoded to the platform format under its byte budget
     let idx = 1;
     for (const sticker of stickers) {
-        // EMOJI: 001.png (3 digits). STICKER: 01.png (2 digits) or just 1.png
-        const pad = type === 'EMOJI' ? 3 : 2;
-        const fileName = `${idx.toString().padStart(pad, '0')}`;
-        folder.file(`${fileName}.png`, await getBlob(sticker.url));
+        const fileName = `${idx.toString().padStart(platform.fileNamePad, '0')}.${platform.format}`;
+        const canvas = await dataUrlToCanvas(sticker.url);
+        const result = await encodeWithBudget(canvas, platform.format, platform.maxBytes);
+        if (!result.withinBudget) oversized.push(fileName);
+        folder.file(fileName, result.blob);
         idx++;
     }
 
-    // 2. Add Main/Tab Images
+    // 2. Derived extras (main/tab/tray icons), CONTAIN-fitted from the main sticker
     const mainRefUrl = mainStickerUrl || (stickers.length > 0 ? stickers[0].url : null);
-    if (mainRefUrl) {
+    if (mainRefUrl && platform.extras.length > 0) {
         try {
-            const img = new Image(); img.src = mainRefUrl; await new Promise(r => img.onload = r);
+            const img = new Image();
+            img.src = mainRefUrl;
+            await new Promise((r, j) => { img.onload = r; img.onerror = j; });
 
-            // STICKER TYPE: Needs main.png (240x240) AND tab.png (96x74)
-            if (type === 'STATIC') {
-                const mainCanvas = document.createElement('canvas'); mainCanvas.width = 240; mainCanvas.height = 240;
-                const ctxM = mainCanvas.getContext('2d');
-                if (ctxM) {
-                    ctxM.imageSmoothingEnabled = true;
-                    ctxM.imageSmoothingQuality = 'high';
-                    const scale = Math.min(240 / img.width, 240 / img.height);
-                    const w = img.width * scale, h = img.height * scale;
-                    ctxM.drawImage(img, (240 - w) / 2, (240 - h) / 2, w, h);
-                    folder.file('main.png', await new Promise<Blob>(r => mainCanvas.toBlob(b => r(b!))));
-                }
-            }
-
-            // BOTH TYPES: Need tab.png (96x74)
-            const tabCanvas = document.createElement('canvas'); tabCanvas.width = 96; tabCanvas.height = 74;
-            const ctxT = tabCanvas.getContext('2d');
-            if (ctxT) {
-                ctxT.imageSmoothingEnabled = true;
-                ctxT.imageSmoothingQuality = 'high';
-                const scaleT = Math.min(96 / img.width, 74 / img.height);
-                const wT = img.width * scaleT, hT = img.height * scaleT;
-                ctxT.drawImage(img, (96 - wT) / 2, (74 - hT) / 2, wT, hT);
-                folder.file('tab.png', await new Promise<Blob>(r => tabCanvas.toBlob(b => r(b!))));
+            for (const extra of platform.extras) {
+                const canvas = document.createElement('canvas');
+                canvas.width = extra.w; canvas.height = extra.h;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) continue;
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                const scale = Math.min(extra.w / img.width, extra.h / img.height);
+                const w = img.width * scale, h = img.height * scale;
+                ctx.drawImage(img, (extra.w - w) / 2, (extra.h - h) / 2, w, h);
+                const result = await encodeWithBudget(canvas, extra.format, extra.maxBytes);
+                if (!result.withinBudget) oversized.push(extra.file);
+                folder.file(extra.file, result.blob);
             }
         } catch (e) { console.error("Icon generation failed", e); }
     }
 
-    // 3. Metadata
+    // 3. Publishing instructions + metadata
+    folder.file('README.txt', platform.packNote);
     if (packageInfo) {
         const content = `[Sticker Info]\nTitle: ${packageInfo.title.zh}\nDesc: ${packageInfo.description.zh}`;
         folder.file('info.txt', content);
@@ -455,6 +463,7 @@ export const generateFrameZip = async (stickers: any[], zipName: string, mainSti
     const content = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(content);
     const a = document.createElement('a'); a.href = url; a.download = `${zipName}.zip`; a.click();
+    return { oversized };
 };
 
 export const extractDominantColors = (imageUrl: string): Promise<string[]> => {

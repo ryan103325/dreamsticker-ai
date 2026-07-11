@@ -15,6 +15,8 @@ const KEY = 'last_work';
 export interface SavedWork {
     savedAt: number;
     stickerType: StickerType;
+    /** Target platform id (absent in pre-multi-platform saves → LINE). */
+    platformId?: string;
     finalStickers: GeneratedImage[];
     stickerPackageInfo: StickerPackageInfo | null;
     zipFileName: string;

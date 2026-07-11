@@ -189,7 +189,8 @@ export const processGreenScreenAndSlice = async (
     cols: number,
     targetW: number,
     targetH: number,
-    padding: number = 2
+    padding: number = 2,
+    fit: 'CONTAIN' | 'COVER' = 'CONTAIN'
 ): Promise<string[]> => {
     const isCvReady = await waitForOpenCV();
     if (!isCvReady) throw new Error("OpenCV is not loaded.");
@@ -336,8 +337,8 @@ export const processGreenScreenAndSlice = async (
                     const availableW = targetW - (padding * 2);
                     const availableH = targetH - (padding * 2);
 
-                    // padding 0 = EMOJI full-bleed (COVER); otherwise CONTAIN
-                    const scale = padding === 0
+                    // COVER = emoji full-bleed; CONTAIN = sticker with margins
+                    const scale = fit === 'COVER'
                         ? Math.max(availableW / w, availableH / h)
                         : Math.min(availableW / w, availableH / h);
 

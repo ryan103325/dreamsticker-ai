@@ -11,6 +11,11 @@ export default defineConfig(() => {
       host: '0.0.0.0',
     },
     plugins: [react()],
+    // @jsquash/webp ships wasm that esbuild's dev pre-bundling breaks;
+    // it is dynamically imported only on browsers without native WebP encode.
+    optimizeDeps: {
+      exclude: ['@jsquash/webp'],
+    },
     build: {
       rollupOptions: {
         output: {

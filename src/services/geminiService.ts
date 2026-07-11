@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { GeneratedImage, StickerConfig, InputMode, StickerType, FontConfig, SheetLayout, getStickerSpec, StickerPackageInfo, STICKER_SPECS, ArtisticFilterType, CharacterInput } from "../types";
+import { GeneratedImage, StickerConfig, InputMode, FontConfig, SheetLayout, StickerPackageInfo, ArtisticFilterType, CharacterInput } from "../types";
+import { PlatformSpec, PLATFORMS } from "../platforms";
 import { stripMimeType, getMimeType, wait } from "./utils";
 
 // --- Model Configuration -----------------------------------------------
@@ -757,25 +758,44 @@ export const generateGroupCharacterSheet = async (
     throw lastError;
 };
 
-export const generateStickerSheet = async (characterUrl: string, configs: StickerConfig[], style: string, sheetIndex: number, totalSheets: number, layout?: SheetLayout, fontConfig?: FontConfig, stickerType: StickerType = 'STATIC'): Promise<{ url: string }> => {
+// Aspect-ratio buckets the image APIs accept; picks the closest to `ratioVal`.
+const SUPPORTED_RATIOS: { ar: "1:1" | "3:4" | "4:3" | "9:16" | "16:9", val: number }[] = [
+    { ar: "1:1", val: 1.0 }, { ar: "3:4", val: 0.75 }, { ar: "4:3", val: 1.333 }, { ar: "9:16", val: 0.5625 }, { ar: "16:9", val: 1.777 }
+];
+const bestAspectFor = (ratioVal: number) =>
+    SUPPORTED_RATIOS.reduce((prev, curr) => Math.abs(curr.val - ratioVal) < Math.abs(prev.val - ratioVal) ? curr : prev);
+
+// White-outline prompt rule for grid sheets, per platform convention.
+const sheetOutlineRule = (outline: PlatformSpec['outline']): string => {
+    if (outline === 'thick-white') {
+        return `3. ** SAFETY BARRIER:** Every element(Character + Text + Effects) MUST have a ** Thick(15px), Solid WHITE Border ** (Sticker Outline). This acts as a safety barrier between the artwork and the green screen.`;
+    }
+    if (outline === 'thin-white') {
+        return `3. ** SAFETY BARRIER:** Every element(Character + Text + Effects) MUST have a ** Thin(6px), Solid WHITE Border ** (Sticker Outline). This acts as a safety barrier between the artwork and the green screen.`;
+    }
+    return `3. ** SAFETY MARGIN:** Do NOT draw any white sticker border. Keep a clean silhouette, and leave a clear green margin around every element so nothing touches the cell boundary.`;
+};
+
+export const generateStickerSheet = async (characterUrl: string, configs: StickerConfig[], style: string, sheetIndex: number, totalSheets: number, layout?: SheetLayout, fontConfig?: FontConfig, platform: PlatformSpec = PLATFORMS.LINE_STICKER): Promise<{ url: string }> => {
     const ai = getAI();
     const base64Char = stripMimeType(characterUrl);
 
     const cols = layout?.cols || 4;
     const rows = layout?.rows || 2;
+    const isEmoji = platform.fit === 'COVER';
 
-    // Simple aspect ratio logic for Static
-    const ratioVal = cols / rows;
-    const supportedRatios: { ar: "1:1" | "3:4" | "4:3" | "9:16" | "16:9", val: number }[] = [
-        { ar: "1:1", val: 1.0 }, { ar: "3:4", val: 0.75 }, { ar: "4:3", val: 1.333 }, { ar: "9:16", val: 0.5625 }, { ar: "16:9", val: 1.777 }
-    ];
-    const bestAR = supportedRatios.reduce((prev, curr) => Math.abs(curr.val - ratioVal) < Math.abs(prev.val - ratioVal) ? curr : prev).ar;
-    const targetRatio = supportedRatios.find(r => r.ar === bestAR)?.val || 1.0;
+    // Sheet aspect follows the grid shape INCLUDING the platform's cell
+    // ratio, so sliced cells CONTAIN-fit the target canvas without waste.
+    const cellRatio = platform.cell.w / platform.cell.h;
+    const ratioVal = (cols * cellRatio) / rows;
+    const best = bestAspectFor(ratioVal);
+    const bestAR = best.ar;
+    const targetRatio = best.val;
 
     // Describe the canvas the API will ACTUALLY render (aspect bucket +
     // resolution tier), so the model's grid math matches reality.
-    const targetCellW = stickerType === 'EMOJI' ? 180 : 370;
-    const targetCellH = stickerType === 'EMOJI' ? 180 : 320;
+    const targetCellW = platform.cell.w;
+    const targetCellH = platform.cell.h;
     const sheetSize = pickSheetImageSize(bestAR, cols, rows, targetCellW, targetCellH);
     const dims = sheetDimsFor(bestAR, sheetSize);
     const cellW = Math.floor(dims.width / cols);
@@ -786,7 +806,7 @@ export const generateStickerSheet = async (characterUrl: string, configs: Sticke
 
     let basePrompt = "";
 
-    if (stickerType === 'EMOJI') {
+    if (isEmoji) {
         // --- EMOJI MODE PROMPT ---
         basePrompt = `
     ${canvasSpec}
@@ -798,7 +818,7 @@ export const generateStickerSheet = async (characterUrl: string, configs: Sticke
         - ** COLORS **: Use the EXACT same color palette as the reference image.
        - ** FEATURES **: Keep facial features, hair style / color, and accessories consistent.
        - ** DO NOT ** simplify into a generic "stick figure" or "black and white icon" unless the reference is that style.
-    2. ** SIZE OPTIMIZATION **: These are small emojis(180px).
+    2. ** SIZE OPTIMIZATION **: These are small emojis(${platform.cell.w}px).
        - Keep lines ** Bold and Clear **.
        - Avoid microscopic details that vanish at small sizes.
        - But ** KEEP THE VIBE ** of the original character.
@@ -825,9 +845,9 @@ export const generateStickerSheet = async (characterUrl: string, configs: Sticke
     1. ** NO CAMOUFLAGE:** STRICTLY PROHIBITED colors inside the artwork: ** Bright Green(#00FF00) ** or Lime Green.These confuse the background cutter.Use Teal, Blue, or Dark Forest Green instead.
     2. ** FADE - TO - WHITE RULE:** If an object needs to fade(e.g., ghosts, speed lines, magic aura), it MUST gradient into ** SOLID WHITE **, NEVER fade into the green background.
        - * Reasoning:* Fading to Green causes the background remover to delete the object's tail. Fading to White preserves it.
-3. ** SAFETY BARRIER:** Every element(Character + Text + Effects) MUST have a ** Thick(15px), Solid WHITE Border ** (Sticker Outline). This acts as a safety barrier between the artwork and the green screen.
+${sheetOutlineRule(platform.outline)}
 
-    ** COMPOSITION:** The final output will be cropped to ** 370x320 px ** (Ratio ~1.15). Standard sticker proportions.
+    ** COMPOSITION:** The final output will be cropped to ** ${platform.cell.w}x${platform.cell.h} px ** (Ratio ~${cellRatio.toFixed(2)}). Standard sticker proportions.
     
     ** TEXT INTERACTION RULE(CRITICAL):**
     - The text caption is a ** Physical Object ** in the scene.
@@ -858,9 +878,11 @@ Spacing: Ensure > 3 % green gap between all stickers(Vertical & Horizontal).
 
     if (getImageEngine() === 'OPENAI') {
         // gpt-image-2 supports arbitrary sizes: generate the grid at its exact
-        // intended dimensions (cell 464x400 keeps 1.25x headroom over 370x320).
-        const oCellW = stickerType === 'EMOJI' ? 256 : 464;
-        const oCellH = stickerType === 'EMOJI' ? 256 : 400;
+        // intended dimensions with 1.25x downscale headroom over the platform
+        // cell, rounded up to the API's multiple-of-16 requirement.
+        const ceil16 = (n: number) => Math.ceil(n / 16) * 16;
+        const oCellW = ceil16(platform.cell.w * 1.25);
+        const oCellH = ceil16(platform.cell.h * 1.25);
         const exact = { width: cols * oCellW, height: rows * oCellH };
         const oSpec = `Canvas: ${exact.width}x${exact.height} pixels. Grid: ${cols} columns x ${rows} rows, each cell exactly ${oCellW}x${oCellH} pixels. Respect these cell boundaries strictly.`;
         const url = await openaiGenerateImage({
@@ -921,15 +943,23 @@ export const generateSingleSticker = async (
     characterUrl: string,
     config: StickerConfig,
     style: string,
-    stickerType: StickerType = 'STATIC'
+    platform: PlatformSpec = PLATFORMS.LINE_STICKER
 ): Promise<string> => {
     const textRule = config.showText && config.text
         ? `**TEXT:** Render the caption "${config.text}" in Traditional Chinese as a physical object the character INTERACTS with (holding, leaning, sitting on). Bubble/pop-art typography, thin black inner outline + thick white outer outline. Text must NOT be green or black, must NOT cover the face.`
         : `**TEXT:** Do NOT render any text.`;
 
-    const outlineRule = stickerType === 'EMOJI'
-        ? `**STYLE:** LINE emoji (small 180px target). Bold clear lines, no white sticker border, character fills the frame (full bleed) while keeping a thin green margin on all sides.`
-        : `**STYLE:** LINE sticker. Add a thick (15px) solid WHITE sticker outline around the character and text.`;
+    const outlineRule = platform.fit === 'COVER'
+        ? `**STYLE:** Messaging-app emoji (small ${platform.cell.w}px target). Bold clear lines, no white sticker border, character fills the frame (full bleed) while keeping a thin green margin on all sides.`
+        : platform.outline === 'thick-white'
+            ? `**STYLE:** Messaging-app sticker. Add a thick (15px) solid WHITE sticker outline around the character and text.`
+            : platform.outline === 'thin-white'
+                ? `**STYLE:** Messaging-app sticker. Add a thin (6px) solid WHITE sticker outline around the character and text.`
+                : `**STYLE:** Messaging-app sticker. Do NOT add any white outline; keep a clean silhouette with a clear green margin (at least 8% of the canvas) on all sides.`;
+
+    // The image APIs only take aspect buckets; every current platform cell is
+    // closest to 1:1, but compute it so future cells stay correct.
+    const aspect = bestAspectFor(platform.cell.w / platform.cell.h).ar;
 
     const prompt = `
 Draw EXACTLY ONE sticker of the reference character on a pure solid green (#00FF00) background.
@@ -954,13 +984,13 @@ ${outlineRule}
         return openaiGenerateImage({
             prompt,
             images: [characterUrl],
-            aspect: '1:1',
+            aspect: aspect as OpenAIAspect,
             quality: 'medium',
         });
     }
 
     if (getImageEngine() === 'HF') {
-        return hfGenerateImage({ prompt, image: characterUrl, aspect: '1:1' });
+        return hfGenerateImage({ prompt, image: characterUrl, aspect });
     }
 
     const ai = getAI();
@@ -972,7 +1002,7 @@ ${outlineRule}
                 const response = await ai.models.generateContent({
                     model,
                     contents: { parts: [{ inlineData: { mimeType: 'image/png', data: stripMimeType(characterUrl) } }, { text: prompt }] },
-                    config: { imageConfig: buildImageConfig(model, { aspectRatio: "1:1", imageSize: "1K" }) }
+                    config: { imageConfig: buildImageConfig(model, { aspectRatio: aspect, imageSize: "1K" }) }
                 });
                 validateResponse(response);
                 const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);

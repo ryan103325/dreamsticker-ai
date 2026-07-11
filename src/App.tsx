@@ -7,20 +7,15 @@ import {
     StickerConfig,
     DEFAULT_STICKER_CONFIGS,
     InputMode,
-    StickerType,
     FontConfig,
     LANGUAGES,
     FONT_STYLES,
     StickerQuantity,
     generateDefaultConfigs,
-    SheetLayout,
-    getStickerSpec,
-    getEmojiSpec,
     StickerPackageInfo,
-    STICKER_SPECS,
-    EMOJI_SPECS,
     CharacterInput
 } from './types';
+import { PLATFORM_LIST, PlatformId, getPlatform, generateLayoutFor, stickerTypeFor, DEFAULT_PLATFORM_ID } from './platforms';
 import { useLanguage } from './LanguageContext';
 import { generateIPCharacter, generateStickerSheet, editSticker, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish, generateStickerPlan, parseStructuredStickerPlan, analyzeImageSubject, generateSimpleIcons, getQualityMode, setQualityMode, QualityMode, getImageEngine, setImageEngine, ImageEngine } from './services/geminiService';
 import { setOpenAIApiKey, hasOpenAIKey } from './services/openaiImageService';
@@ -459,8 +454,13 @@ export const App = () => {
     const [stickerQuantity, setStickerQuantity] = useState<StickerQuantity>(8);
     const [stickerConfigs, setStickerConfigs] = useState<StickerConfig[]>(DEFAULT_STICKER_CONFIGS);
 
-    // Product Type State (Sticker vs Emoji)
-    const [stickerType, setStickerType] = useState<StickerType>('STATIC');
+    // Target Platform (drives grid layout, prompts, slicing, encoding, packaging)
+    const [platformId, setPlatformId] = useState<PlatformId>(() => {
+        try { return getPlatform(localStorage.getItem('platform_id')).id; } catch { return DEFAULT_PLATFORM_ID; }
+    });
+    const platform = getPlatform(platformId);
+    // Legacy product type, derived from the platform (EMOJI = full-bleed COVER)
+    const stickerType = stickerTypeFor(platform);
 
     // Generation Quality Mode (Pro vs Flash image model)
     const [genQuality, setGenQuality] = useState<QualityMode>(getQualityMode());
@@ -487,6 +487,25 @@ export const App = () => {
         setGenModeState(mode);
         try { localStorage.setItem('gen_mode', mode); } catch { /* ignore */ }
     };
+
+    const handlePlatformChange = (id: PlatformId) => {
+        setPlatformId(id);
+        try { localStorage.setItem('platform_id', id); } catch { /* ignore */ }
+        // 512px-class platforms: per-sticker generation is the resolution-safe
+        // default (a grid sheet can't keep 1.3x downscale headroom over 512px)
+        if (getPlatform(id).preferIndividual && genMode === 'SHEET') {
+            handleGenModeChange('INDIVIDUAL');
+        }
+    };
+
+    // Keep the set size legal for the platform (covers both switching and
+    // restoring a platform from localStorage on load)
+    useEffect(() => {
+        if (!platform.quantities.includes(stickerQuantity)) {
+            handleQuantityChange(platform.quantities[0]);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [platformId]);
 
     // Rough USD estimate for one generation run, so the cost difference
     // between strategies is visible BEFORE clicking generate.
@@ -593,6 +612,7 @@ export const App = () => {
                 saveWork({
                     savedAt: Date.now(),
                     stickerType,
+                    platformId,
                     finalStickers: done,
                     stickerPackageInfo,
                     zipFileName,
@@ -600,11 +620,13 @@ export const App = () => {
                 });
             }
         }
-    }, [appStep, finalStickers, stickerPackageInfo, zipFileName, mainStickerId, stickerType]);
+    }, [appStep, finalStickers, stickerPackageInfo, zipFileName, mainStickerId, stickerType, platformId]);
 
     const handleRestoreWork = () => {
         if (!savedWork) return;
-        setStickerType(savedWork.stickerType);
+        // Old saves carry only stickerType; map it to the matching LINE platform
+        setPlatformId(getPlatform(savedWork.platformId
+            ?? (savedWork.stickerType === 'EMOJI' ? 'LINE_EMOJI' : 'LINE_STICKER')).id);
         setFinalStickers(savedWork.finalStickers);
         setStickerPackageInfo(savedWork.stickerPackageInfo);
         setZipFileName(savedWork.zipFileName || 'MyStickers');
@@ -754,7 +776,7 @@ export const App = () => {
         setStickerConfigs(newConfigs);
     };
 
-    const validQuantities: StickerQuantity[] = [8, 16, 24, 32, 40];
+    const validQuantities: StickerQuantity[] = platform.quantities;
 
     const handleSmartInput = () => {
         if (!smartInputText.trim()) return;
@@ -957,11 +979,9 @@ export const App = () => {
         setFinalStickers(prev => prev.map(s => s.id === config.id ? { ...s, status: 'GENERATING' } : s));
         try {
             const effectiveConfig = { ...config, showText: config.showText && includeText };
-            const raw = await generateSingleSticker(generatedChar.url, effectiveConfig, stylePrompt, stickerType);
+            const raw = await generateSingleSticker(generatedChar.url, effectiveConfig, stylePrompt, platform);
             const clean = await processGreenScreenImage(raw);
-            const fitted = stickerType === 'EMOJI'
-                ? await fitImageToCanvas(clean, 180, 180, 'COVER', 0)
-                : await fitImageToCanvas(clean, 370, 320, 'CONTAIN', 2);
+            const fitted = await fitImageToCanvas(clean, platform.cell.w, platform.cell.h, platform.fit, platform.padding);
             setFinalStickers(prev => prev.map(s => s.id === config.id ? { ...s, url: fitted, status: 'SUCCESS' } : s));
         } catch (e) {
             console.error(`[Individual] Sticker ${config.id} failed`, e);
@@ -1015,11 +1035,10 @@ export const App = () => {
         try {
             const generatedSheets: string[] = [];
 
-            let stickersPerSheet: number = stickerQuantity;
-            let layout: SheetLayout;
-
-            const spec = stickerType === 'EMOJI' ? getEmojiSpec(stickerQuantity) : getStickerSpec(stickerQuantity);
-            layout = { rows: spec.rows, cols: spec.cols, width: spec.width, height: spec.height };
+            const stickersPerSheet: number = stickerQuantity;
+            // Grid layout follows the platform's cell aspect ratio (LINE keeps
+            // its regression-locked legacy tables)
+            const layout = generateLayoutFor(platform, stickerQuantity);
 
             const batches = [];
             for (let i = 0; i < stickerConfigs.length; i += stickersPerSheet) {
@@ -1040,7 +1059,7 @@ export const App = () => {
                     cleanConfigs,
                     stylePrompt,
                     i, batches.length, layout, fontConfig,
-                    stickerType // PASS STICKER TYPE
+                    platform
                 );
 
                 generatedSheets.push(sheetResult.url);
@@ -1069,18 +1088,18 @@ export const App = () => {
 
         try {
             let allSlicedImages: string[] = [];
-            const spec = stickerType === 'EMOJI' ? getEmojiSpec(stickerQuantity) : getStickerSpec(stickerQuantity);
-            const rows = spec.rows;
-            const cols = spec.cols;
+            const layout = generateLayoutFor(platform, stickerQuantity);
+            const rows = layout.rows;
+            const cols = layout.cols;
 
             for (let i = 0; i < rawSheetUrls.length; i++) {
                 const url = rawSheetUrls[i];
-                // EMOJI: 180x180, Padding 0. STICKER: 370x320, Padding 2.
-                const sliceW = stickerType === 'EMOJI' ? 180 : 370;
-                const sliceH = stickerType === 'EMOJI' ? 180 : 320;
-                const slicePad = stickerType === 'EMOJI' ? 0 : 2;
-
-                const cvSliced = await processGreenScreenAndSlice(url, rows, cols, sliceW, sliceH, slicePad);
+                // Slice targets come straight from the platform cell spec
+                const cvSliced = await processGreenScreenAndSlice(
+                    url, rows, cols,
+                    platform.cell.w, platform.cell.h,
+                    platform.padding, platform.fit
+                );
                 if (cvSliced.length === 0) {
                     console.warn(`Sheet ${i + 1}: OpenCV returned no objects.`);
                 }
@@ -1175,9 +1194,7 @@ export const App = () => {
 
     const fontStyleDisplay = "可愛 Q 版 Pop Art 字型"; // Hardcoded default
     const artStyleDisplay = promptArtStyleInput || "可愛、活潑、2D平面";
-    const promptSpec = stickerType === 'EMOJI'
-        ? (EMOJI_SPECS[promptGenQuantity] || EMOJI_SPECS[40])
-        : (STICKER_SPECS[promptGenQuantity] || STICKER_SPECS[20]);
+    const promptSpec = generateLayoutFor(platform, promptGenQuantity);
 
     const promptSegments = useMemo(() => {
         const isEmoji = stickerType === 'EMOJI';
@@ -1380,28 +1397,24 @@ export const App = () => {
                                     <p className={`text-lg ${theme === 'dark' ? 'text-indigo-200' : 'text-slate-500'}`}>{t('mainSubtitle')}</p>
                                 </div>
 
-                                {/* PRODUCT MODE SWITCHER */}
-                                <div className="flex justify-center mt-8 mb-4">
-                                    <div className={`p-1 rounded-xl flex gap-1 ${theme === 'dark' ? 'bg-black/40 border border-white/10' : 'bg-slate-200'}`}>
-                                        <button
-                                            onClick={() => setStickerType('STATIC')}
-                                            className={`px-6 py-2 rounded-lg font-bold transition-all ${stickerType === 'STATIC' ? (theme === 'dark' ? 'bg-white/10 text-white shadow-lg border border-white/20' : 'bg-white text-indigo-600 shadow-md') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
-                                        >
-                                            {t('stickerMode')}
-                                        </button>
-                                        <button
-                                            onClick={() => setStickerType('EMOJI')}
-                                            className={`px-6 py-2 rounded-lg font-bold transition-all ${stickerType === 'EMOJI' ? (theme === 'dark' ? 'bg-white/10 text-white shadow-lg border border-white/20' : 'bg-white text-pink-600 shadow-md') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
-                                        >
-                                            {t('emojiMode')}
-                                        </button>
+                                {/* TARGET PLATFORM SELECTOR */}
+                                <div className="flex flex-col items-center mt-8 mb-4 gap-2">
+                                    <span className={`text-xs font-bold uppercase tracking-widest ${theme === 'dark' ? 'text-indigo-300/70' : 'text-slate-400'}`}>{t('platformLabel')}</span>
+                                    <div className={`p-1 rounded-xl flex flex-wrap justify-center gap-1 max-w-2xl ${theme === 'dark' ? 'bg-black/40 border border-white/10' : 'bg-slate-200'}`}>
+                                        {PLATFORM_LIST.map(p => (
+                                            <button
+                                                key={p.id}
+                                                onClick={() => handlePlatformChange(p.id)}
+                                                className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${platformId === p.id ? (theme === 'dark' ? 'bg-white/10 text-white shadow-lg border border-white/20' : 'bg-white text-indigo-600 shadow-md') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
+                                            >
+                                                {t(`platform_${p.id}`)}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
-                                {stickerType === 'EMOJI' && (
-                                    <div className="text-center text-sm text-pink-500 font-bold mb-8 animate-fade-in">
-                                        {t('emojiNote')}
-                                    </div>
-                                )}
+                                <div className="text-center text-sm text-pink-500 font-bold mb-8 animate-fade-in">
+                                    {t(`platformNote_${platformId}`)}
+                                </div>
 
                                 {/* GENERATION ENGINE + QUALITY / COST SWITCHER */}
                                 <div className="flex flex-col items-center gap-2 mb-4">
@@ -1922,6 +1935,14 @@ export const App = () => {
                                 </div>
                             </div>
 
+                            {platform.preferIndividual && (
+                                <div className="mb-6 -mt-4 text-right">
+                                    <span className="inline-block text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+                                        💡 {t('platformPrefersIndividual')}
+                                    </span>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                 <div className="lg:col-span-1 space-y-6">
                                     <div className="bg-gradient-to-br from-indigo-50 to-white p-6 rounded-3xl border border-indigo-100 shadow-sm sticky top-24">
@@ -2077,7 +2098,19 @@ export const App = () => {
                                             {t('generateTabThumb')}
                                         </button>
                                     )}
-                                    <button onClick={() => { const done = finalStickers.filter(s => s.status === 'SUCCESS'); if (done.length === 0) return; generateFrameZip(done, zipFileName || "MyStickers", done.find(s => s.id === mainStickerId)?.url, stickerPackageInfo || undefined, stickerType); }} className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform hover:-translate-y-1 whitespace-nowrap"><DownloadIcon /> {t('downloadAll')}</button>
+                                    <button onClick={async () => {
+                                        const done = finalStickers.filter(s => s.status === 'SUCCESS');
+                                        if (done.length === 0) return;
+                                        try {
+                                            const { oversized } = await generateFrameZip(done, zipFileName || "MyStickers", done.find(s => s.id === mainStickerId)?.url, stickerPackageInfo || undefined, platform);
+                                            if (oversized.length > 0) {
+                                                toast(`${t('zipOversizedWarning')}${oversized.join(', ')}`, 'error');
+                                            }
+                                        } catch (e) {
+                                            console.error(e);
+                                            toast("打包失敗，請重試。", 'error');
+                                        }
+                                    }} className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold shadow-lg flex items-center gap-2 transition-transform hover:-translate-y-1 whitespace-nowrap"><DownloadIcon /> {t('downloadAll')}</button>
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
@@ -2100,7 +2133,7 @@ export const App = () => {
                                                 <div className="flex items-center gap-2 mb-2"><span className="w-2 h-2 rounded-full bg-purple-500"></span><span className="text-sm font-bold text-slate-500 uppercase tracking-widest">{t('infoEN')}</span></div>
                                                 <div><label className="block text-xs font-bold text-slate-400 mb-1">Title</label><div className="flex gap-2"><input readOnly value={stickerPackageInfo.title.en} className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-purple-200" /><CopyBtn text={stickerPackageInfo.title.en} label="Copy" successLabel="Copied" /></div></div>
                                                 <div><label className="block text-xs font-bold text-slate-400 mb-1">Description</label><div className="relative"><textarea readOnly value={stickerPackageInfo.description.en} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 outline-none focus:ring-2 focus:ring-purple-200 h-24 resize-none" /><div className="absolute bottom-3 right-3"><CopyBtn text={stickerPackageInfo.description.en} label="Copy" successLabel="Copied" /></div></div></div>
-                                                <div className="flex-1 flex items-end justify-end mt-4"><a href="https://creator.line.me/zh-hant/" target="_blank" rel="noreferrer" className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-bold bg-indigo-50 hover:bg-indigo-100 px-6 py-3 rounded-xl transition-colors shadow-sm hover:shadow-md"><span>🚀</span> {t('goToMarket')}<ExternalLinkIcon /></a></div>
+                                                <div className="flex-1 flex items-end justify-end mt-4"><a href={platform.marketUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-bold bg-indigo-50 hover:bg-indigo-100 px-6 py-3 rounded-xl transition-colors shadow-sm hover:shadow-md"><span>🚀</span> {t('goToMarket')} ({t(`platform_${platformId}`)})<ExternalLinkIcon /></a></div>
                                             </div>
                                         </div>
                                     </div>
