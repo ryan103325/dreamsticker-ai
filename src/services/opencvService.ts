@@ -3,29 +3,47 @@
  * OpenCV Service for Green Screen Auto-Slicing
  * Uses OpenCV.js to detect the background, find content contours, and slice
  * characters out of a grid sheet.
+ *
+ * OpenCV.js is self-bundled from the @techstark/opencv-js npm package
+ * (previously loaded at runtime from docs.opencv.org, which is a docs site,
+ * not a CDN, and could vanish at any time). The ~13MB module is dynamically
+ * imported so it stays a lazy chunk, fetched only when slicing is needed.
  */
 
-// Helper to wait for OpenCV to be ready
-export const waitForOpenCV = async (timeout = 30000): Promise<boolean> => {
-    // @ts-ignore
-    if (window.cv && window.cv.Mat) return true;
+let cvPromise: Promise<any> | null = null;
 
-    return new Promise((resolve) => {
-        let timer = 0;
-        const interval = setInterval(() => {
-            timer += 100;
-            // @ts-ignore
-            if (window.cv && window.cv.Mat) {
-                clearInterval(interval);
-                resolve(true);
+const loadOpenCV = (): Promise<any> => {
+    if (!cvPromise) {
+        const p = (async () => {
+            const mod: any = await import('@techstark/opencv-js');
+            let cv: any = mod.default ?? mod;
+            // Emscripten builds export either a thenable module or an object
+            // that fires onRuntimeInitialized — handle both shapes.
+            if (typeof cv?.then === 'function') cv = await cv;
+            if (!cv.Mat) {
+                await new Promise<void>((resolve) => { cv.onRuntimeInitialized = () => resolve(); });
             }
-            if (timer >= timeout) {
-                clearInterval(interval);
-                console.error("OpenCV load timeout. Please check your internet connection.");
-                resolve(false);
-            }
-        }, 100);
-    });
+            return cv;
+        })();
+        // A genuine load failure should not poison future retries
+        p.catch(() => { if (cvPromise === p) cvPromise = null; });
+        cvPromise = p;
+    }
+    return cvPromise;
+};
+
+// Resolves true once OpenCV is ready; false on load failure or timeout.
+export const waitForOpenCV = async (timeout = 30000): Promise<boolean> => {
+    try {
+        await Promise.race([
+            loadOpenCV(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('OpenCV load timeout')), timeout)),
+        ]);
+        return true;
+    } catch (e) {
+        console.error('OpenCV.js failed to load:', e);
+        return false;
+    }
 };
 
 interface RectLike { x: number; y: number; width: number; height: number }
@@ -195,8 +213,7 @@ export const processGreenScreenAndSlice = async (
     const isCvReady = await waitForOpenCV();
     if (!isCvReady) throw new Error("OpenCV is not loaded.");
 
-    // @ts-ignore
-    const cv = window.cv;
+    const cv: any = await loadOpenCV();
 
     return new Promise((resolve, reject) => {
         const img = new Image();

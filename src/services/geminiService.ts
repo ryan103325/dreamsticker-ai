@@ -134,6 +134,29 @@ const getAI = () => {
     return new GoogleGenAI({ apiKey: key });
 };
 
+/**
+ * Lightweight model health check (Roadmap §3): fetches model METADATA via
+ * models.get — free, no image generation cost — for the configured image
+ * models. Returns the ids that are no longer available so the UI can warn
+ * explicitly instead of silently degrading down the fallback chain (this
+ * bit users when preview models were retired).
+ */
+export const checkModelHealth = async (): Promise<{ missing: string[] }> => {
+    const ai = getAI();
+    const models = [...new Set([IMAGE_MODEL_PRO, IMAGE_MODEL_FLASH])];
+    const missing: string[] = [];
+    await Promise.all(models.map(async (model) => {
+        try {
+            await ai.models.get({ model });
+        } catch (e: any) {
+            // Only 404/NOT_FOUND means the model id is gone; auth or network
+            // errors say nothing about model availability.
+            if (e?.status === 404 || /not[ _]?found/i.test(e?.message || '')) missing.push(model);
+        }
+    }));
+    return { missing };
+};
+
 async function callWithRetry<T>(apiCall: () => Promise<T>, retries: number = 2, delay: number = 2000): Promise<T> {
     try { return await apiCall(); }
     catch (error: any) {

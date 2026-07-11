@@ -6,9 +6,12 @@
 
 ```bash
 npm install
-npm run dev        # http://localhost:3000
-npm run typecheck  # TypeScript check
-npm run build      # production build
+npm run dev         # http://localhost:3000
+npm run typecheck   # TypeScript check
+npm run test        # unit tests (vitest)
+npm run check:i18n  # zh/en dictionary completeness check
+npm run build       # production build
+npx playwright test # E2E smoke tests (requires npm run build first)
 ```
 
 需要一把 [Google Gemini API Key](https://aistudio.google.com/app/apikey) 才能實際測試生成功能（首頁輸入即可，僅存於瀏覽器）。

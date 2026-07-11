@@ -8,6 +8,7 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "check:i18n": "node scripts/check-i18n.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -15,12 +16,14 @@
     "@huggingface/inference": "^4.13.22",
     "@jsquash/webp": "^1.5.0",
     "@tailwindcss/postcss": "^4.1.18",
+    "@techstark/opencv-js": "^4.12.0-release.1",
     "jszip": "3.10.1",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "upng-js": "2.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "^25.0.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

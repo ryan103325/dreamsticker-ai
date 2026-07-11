@@ -71,6 +71,18 @@ export const translations = {
         platformNote_WECHAT: "＊240×240 px PNG，於微信表情開放平台上架（一組 16 或 24 張）",
         platformPrefersIndividual: "此平台目標 512px：已預設「逐張生成」以確保解析度。網格模式需 4K 大圖且解析度餘裕不足，不建議。",
         zipOversizedWarning: "已盡量壓縮，但仍有檔案超過平台大小上限：",
+        stopGenerating: "停止生成",
+        modelUnavailableWarning: "注意：以下生圖模型目前無法使用，生成時將自動改用備用模型：",
+
+        // Staged loader
+        stageAnalyze: "分析角色",
+        stageCompose: "構圖排版",
+        stageColor: "上色繪製",
+        stagePolish: "收尾輸出",
+        stageDetect: "偵測綠幕背景",
+        stageContour: "輪廓分析",
+        stageCut: "切割去背",
+        stageExport: "高品質輸出",
 
         // Input Modes
         modePhoto: "照片轉 IP",
@@ -428,6 +440,18 @@ export const translations = {
         platformNote_WECHAT: "*240x240 px PNG, published via the WeChat Sticker Open Platform (sets of 16 or 24)",
         platformPrefersIndividual: "This platform targets 512px: Individual generation is the default to preserve resolution. Grid mode would need a 4K sheet and still lacks downscale headroom.",
         zipOversizedWarning: "Compressed as far as possible, but some files still exceed the platform size limit: ",
+        stopGenerating: "Stop Generating",
+        modelUnavailableWarning: "Warning: these image models are currently unavailable; generation will automatically use fallback models: ",
+
+        // Staged loader
+        stageAnalyze: "Analyzing character",
+        stageCompose: "Composing layout",
+        stageColor: "Drawing & coloring",
+        stagePolish: "Finishing up",
+        stageDetect: "Detecting background",
+        stageContour: "Analyzing contours",
+        stageCut: "Slicing & keying",
+        stageExport: "High-quality export",
 
         // Input Modes
         modePhoto: "Photo to IP",

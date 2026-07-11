@@ -17,7 +17,7 @@ import {
 } from './types';
 import { PLATFORM_LIST, PlatformId, getPlatform, generateLayoutFor, stickerTypeFor, DEFAULT_PLATFORM_ID } from './platforms';
 import { useLanguage } from './LanguageContext';
-import { generateIPCharacter, generateStickerSheet, editSticker, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish, generateStickerPlan, parseStructuredStickerPlan, analyzeImageSubject, generateSimpleIcons, getQualityMode, setQualityMode, QualityMode, getImageEngine, setImageEngine, ImageEngine } from './services/geminiService';
+import { generateIPCharacter, generateStickerSheet, editSticker, generateStickerPackageInfo, generateRandomCharacterPrompt, generateVisualDescription, generateGroupCharacterSheet, analyzeImageForCharacterDescription, generateCharacterDescriptionFromKeyword, translateActionToEnglish, generateStickerPlan, parseStructuredStickerPlan, analyzeImageSubject, generateSimpleIcons, getQualityMode, setQualityMode, QualityMode, getImageEngine, setImageEngine, ImageEngine, checkModelHealth } from './services/geminiService';
 import { setOpenAIApiKey, hasOpenAIKey } from './services/openaiImageService';
 import { setHFToken, hasHFToken } from './services/hfImageService';
 import { generateFrameZip, resizeImage, extractDominantColors, processGreenScreenImage, generateTabImage, fitImageToCanvas } from './services/utils';
@@ -130,6 +130,13 @@ const StickerCard: React.FC<StickerCardProps> = ({
                         <span className="text-2xl mb-2">⚠️</span>
                         <span className="text-xs font-bold">失敗</span>
                         <button onClick={onRetry} className="mt-3 px-3 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded-full text-xs font-bold transition-colors">重試</button>
+                    </div>
+                )}
+                {sticker.status === 'CANCELLED' && (
+                    <div className="flex flex-col items-center justify-center text-slate-400 px-4 text-center">
+                        <span className="text-2xl mb-2">⏹</span>
+                        <span className="text-xs font-bold">已取消</span>
+                        <button onClick={onRetry} className="mt-3 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full text-xs font-bold transition-colors">重試</button>
                     </div>
                 )}
                 {sticker.status === 'SUCCESS' && (
@@ -446,6 +453,8 @@ export const App = () => {
     const [stylePrompt, setStylePrompt] = useState(DEFAULT_STYLE);
     const [isProcessing, setIsProcessing] = useState(false);
     const [loadingMsg, setLoadingMsg] = useState("");
+    // Optional staged progress labels shown under the full-screen loader
+    const [loadingStages, setLoadingStages] = useState<string[] | null>(null);
 
     const [generatedChar, setGeneratedChar] = useState<GeneratedImage | null>(null);
     const [variationSeed, setVariationSeed] = useState(0);
@@ -581,6 +590,14 @@ export const App = () => {
         }
         setGoogleProfile(loadGoogleProfile());
         setHasKey(true);
+
+        // Fire-and-forget model health check: warn loudly when a configured
+        // image model has been retired instead of silently falling back.
+        checkModelHealth().then(({ missing }) => {
+            if (missing.length > 0) {
+                toast(`${t('modelUnavailableWarning')}${missing.join(', ')}`, 'error');
+            }
+        }).catch(() => { /* network/auth issues surface elsewhere */ });
     };
 
     const handleSignOut = () => {
@@ -591,10 +608,13 @@ export const App = () => {
     // Security update: No auto-loading of keys.
     // useEffect(() => { ... }, []);
 
-    // 2. OpenCV Check
+    // 2. OpenCV: lazily fetch the ~13MB wasm module only when the user
+    // actually reaches the sheet-slicing step
     useEffect(() => {
-        waitForOpenCV().then(ready => setIsOpenCVReady(ready));
-    }, []);
+        if (appStep === AppStep.SHEET_EDITOR && !isOpenCVReady) {
+            waitForOpenCV().then(ready => setIsOpenCVReady(ready));
+        }
+    }, [appStep, isOpenCVReady]);
 
     // 3. Work persistence: offer to restore the last finished set, and keep
     // the current one saved so a refresh doesn't destroy the output.
@@ -972,7 +992,11 @@ export const App = () => {
         }
     };
 
-    // Generates ONE sticker end-to-end (AI image -> green removal -> LINE-size
+    // Individual-mode queue control: cancellation flag + running indicator
+    const cancelIndividualRef = useRef(false);
+    const [isIndividualRunning, setIsIndividualRunning] = useState(false);
+
+    // Generates ONE sticker end-to-end (AI image -> green removal -> platform
     // canvas). Used by Individual mode and the per-sticker retry button.
     const generateOneSticker = async (config: StickerConfig) => {
         if (!generatedChar) return;
@@ -1005,13 +1029,24 @@ export const App = () => {
         setAppStep(AppStep.STICKER_PROCESSING);
 
         // Small worker pool: 2 concurrent requests balances speed vs rate limits.
+        cancelIndividualRef.current = false;
+        setIsIndividualRunning(true);
         const queue = [...stickerConfigs];
         const workers = Array.from({ length: 2 }, async () => {
             for (let cfg = queue.shift(); cfg; cfg = queue.shift()) {
+                if (cancelIndividualRef.current) break;
                 await generateOneSticker(cfg);
             }
         });
         await Promise.all(workers);
+        setIsIndividualRunning(false);
+    };
+
+    // Stops dequeuing further stickers; the (max 2) requests already in
+    // flight finish normally, everything still queued flips to CANCELLED.
+    const handleStopIndividual = () => {
+        cancelIndividualRef.current = true;
+        setFinalStickers(prev => prev.map(s => s.status === 'PENDING' ? { ...s, status: 'CANCELLED' } : s));
     };
 
     const handleRetrySticker = (stickerId: string) => {
@@ -1031,6 +1066,7 @@ export const App = () => {
         }
         setIsProcessing(true);
         setLoadingMsg(t('generating'));
+        setLoadingStages([t('stageAnalyze'), t('stageCompose'), t('stageColor'), t('stagePolish')]);
 
         try {
             const generatedSheets: string[] = [];
@@ -1073,6 +1109,7 @@ export const App = () => {
             toast("生成失敗，請檢查網路連線或 API Key。", 'error');
         } finally {
             setIsProcessing(false);
+            setLoadingStages(null);
         }
     };
 
@@ -1085,6 +1122,7 @@ export const App = () => {
 
         setIsProcessing(true);
         setLoadingMsg("正在自動偵測、去背、裁切...");
+        setLoadingStages([t('stageDetect'), t('stageContour'), t('stageCut'), t('stageExport')]);
 
         try {
             let allSlicedImages: string[] = [];
@@ -1129,6 +1167,7 @@ export const App = () => {
             toast("自動處理失敗：" + (e as Error).message, 'error');
         } finally {
             setIsProcessing(false);
+            setLoadingStages(null);
         }
     };
 
@@ -1896,7 +1935,7 @@ export const App = () => {
                 {
                     appStep === AppStep.STICKER_CONFIG && (
                         <div className="animate-fade-in-up mt-2 max-w-6xl mx-auto">
-                            <div className="flex justify-between items-end mb-8">
+                            <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-8">
                                 <div>
                                     <h2 className="text-3xl font-black text-slate-800">{t('configTitle')} 📝</h2>
                                     <p className="text-slate-500 mt-2">{t('configSubtitle')}</p>
@@ -2076,6 +2115,14 @@ export const App = () => {
                                     <p className="text-slate-500 mt-1">{t('stickerDoneSubtitle')}</p>
                                 </div>
                                 <div className="flex items-center gap-3">
+                                    {isIndividualRunning && (
+                                        <button
+                                            onClick={handleStopIndividual}
+                                            className="px-4 py-3 bg-red-50 border-2 border-red-200 text-red-600 rounded-xl font-bold hover:bg-red-100 transition-colors shadow-sm whitespace-nowrap flex items-center gap-2"
+                                        >
+                                            ⏹ {t('stopGenerating')}
+                                        </button>
+                                    )}
                                     <div className="relative">
                                         <input
                                             type="text"
@@ -2151,7 +2198,7 @@ export const App = () => {
                         </div>
                     )}
             </main >
-            {isProcessing && <Loader message={loadingMsg} />
+            {isProcessing && <Loader message={loadingMsg} stages={loadingStages ?? undefined} />
             }
             <MagicEditor isOpen={magicEditorOpen} imageUrl={editorImage} onClose={() => setMagicEditorOpen(false)} onGenerate={handleMagicGenerate} isProcessing={isProcessing} isAnimated={false} />
             <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />

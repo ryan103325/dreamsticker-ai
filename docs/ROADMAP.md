@@ -141,18 +141,18 @@ interface PlatformSpec {
 
 依優先序：
 
-- [ ] **OpenCV 自行打包**：目前從 `docs.opencv.org` 載入 4.5.0（不是 CDN、隨時可能失效）。改用 npm 套件（如 `@techstark/opencv-js`）或 self-host wasm 到 `public/`。注意 bundle 大小，維持 lazy load。
-- [ ] **Service Worker / PWA 完成**：離線殼層 + 資源快取（生成功能離線無意義，但 app 殼要能開）。完成後手機「加入主畫面」即類原生體驗。
+- [x] **OpenCV 自行打包**：目前從 `docs.opencv.org` 載入 4.5.0（不是 CDN、隨時可能失效）。改用 npm 套件（如 `@techstark/opencv-js`）或 self-host wasm 到 `public/`。注意 bundle 大小，維持 lazy load。
+- [x] **Service Worker / PWA 完成**：離線殼層 + 資源快取（生成功能離線無意義，但 app 殼要能開）。完成後手機「加入主畫面」即類原生體驗。
 - [x] **CI 加 typecheck**：deploy.yml 的 build 前加 `npm run typecheck`（現在 vite build 不做型別檢查）。
-- [ ] **生成等待體驗**：全屏 Loader 改為階段式進度（分析 → 構圖 → 上色 → 切割），逐張模式已有卡片狀態可參考。
+- [x] **生成等待體驗**：全屏 Loader 改為階段式進度（分析 → 構圖 → 上色 → 切割），逐張模式已有卡片狀態可參考。
 - [ ] **icon 系統化**：emoji 圖示（📸🖼️📝📂）換 `lucide-react`（或保留 emoji 作為風格決策，二擇一並統一）。
-- [ ] **手機 RWD**:固定底欄遮內容問題、navbar 小螢幕擁擠。
+- [x] **手機 RWD**:固定底欄遮內容問題、navbar 小螢幕擁擠。
 - [ ] **錯誤回報**：接 Sentry（免費額度夠用）；GA4 或 PostHog 基本埋點（頁面、生成成功率、引擎分佈）。
-- [ ] **i18n 檢查腳本**：`scripts/check-i18n.mjs` 掃描 `t('...')` 用量 vs 字典，缺鍵時 CI 失敗（歷史上發生過 39 個鍵缺失直接顯示鍵名的事故）。
-- [ ] **E2E 冒煙測試**：Playwright 腳本已有雛形（會話紀錄中），正式化放進 repo + CI。
+- [x] **i18n 檢查腳本**：`scripts/check-i18n.mjs` 掃描 `t('...')` 用量 vs 字典，缺鍵時 CI 失敗（歷史上發生過 39 個鍵缺失直接顯示鍵名的事故）。
+- [x] **E2E 冒煙測試**：Playwright 腳本已有雛形（會話紀錄中），正式化放進 repo + CI。
 - [ ] **深色模式長期方案**：現在是 `.dark` override sheet（`index.css`），可用但屬於過渡方案；長期應逐步遷移到 `dark:` variants。**不急，能用**。
-- [ ] **逐張生成的佇列管理**：目前並行 2、無取消功能；補「停止生成」按鈕與佇列取消。
-- [ ] **模型健康檢查**：啟動時輕量 ping 一次模型（或首次失敗時），preview 模型下架時給使用者明確提示而非默默降級。
+- [x] **逐張生成的佇列管理**：目前並行 2、無取消功能；補「停止生成」按鈕與佇列取消。
+- [x] **模型健康檢查**：啟動時輕量 ping 一次模型（或首次失敗時），preview 模型下架時給使用者明確提示而非默默降級。
 
 ---
 

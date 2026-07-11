@@ -1,5 +1,5 @@
 
-export type GenerationStatus = 'PENDING' | 'GENERATING' | 'COOLDOWN' | 'SUCCESS' | 'ERROR';
+export type GenerationStatus = 'PENDING' | 'GENERATING' | 'COOLDOWN' | 'SUCCESS' | 'ERROR' | 'CANCELLED';
 
 export interface GeneratedImage {
   id: string;
