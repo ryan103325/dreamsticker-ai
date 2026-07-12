@@ -4,27 +4,49 @@
  * Uses OpenCV.js to detect the background, find content contours, and slice
  * characters out of a grid sheet.
  *
- * OpenCV.js is self-bundled from the @techstark/opencv-js npm package
- * (previously loaded at runtime from docs.opencv.org, which is a docs site,
- * not a CDN, and could vanish at any time). The ~13MB module is dynamically
- * imported so it stays a lazy chunk, fetched only when slicing is needed.
+ * OpenCV.js is SELF-HOSTED: scripts/copy-opencv.mjs copies it from the
+ * @techstark/opencv-js npm package into public/vendor/ (postinstall), and
+ * it is injected as a classic <script> tag on demand. Two hard-won
+ * constraints shape this:
+ * - It must NOT go through the bundler: the emscripten UMD does not survive
+ *   Rollup's CommonJS interop (initializes in dev/Node, silently never
+ *   becomes ready in a production build).
+ * - window.cv is a fake thenable whose `then` resolves to itself — `await`
+ *   loops forever and freezes the tab. Poll cv.Mat / use
+ *   onRuntimeInitialized instead; never await it.
  */
 
 let cvPromise: Promise<any> | null = null;
 
+const OPENCV_URL = `${import.meta.env.BASE_URL}vendor/opencv.js`;
+
 const loadOpenCV = (): Promise<any> => {
     if (!cvPromise) {
-        const p = (async () => {
-            const mod: any = await import('@techstark/opencv-js');
-            let cv: any = mod.default ?? mod;
-            // Emscripten builds export either a thenable module or an object
-            // that fires onRuntimeInitialized — handle both shapes.
-            if (typeof cv?.then === 'function') cv = await cv;
-            if (!cv.Mat) {
-                await new Promise<void>((resolve) => { cv.onRuntimeInitialized = () => resolve(); });
-            }
-            return cv;
-        })();
+        const p = new Promise<any>((resolve, reject) => {
+            const existing = (window as any).cv;
+            if (existing?.Mat) return resolve(existing);
+
+            const script = document.createElement('script');
+            script.async = true;
+            script.src = OPENCV_URL;
+            script.onload = () => {
+                const cv = (window as any).cv;
+                if (!cv) return reject(new Error('opencv.js loaded but window.cv is missing'));
+                if (cv.Mat) return resolve(cv);
+                // Wait for the wasm runtime: callback + poll (the callback
+                // alone can be missed if the runtime finished before we
+                // assigned it).
+                cv.onRuntimeInitialized = () => resolve(cv);
+                const poll = setInterval(() => {
+                    if ((window as any).cv?.Mat) {
+                        clearInterval(poll);
+                        resolve((window as any).cv);
+                    }
+                }, 250);
+            };
+            script.onerror = () => reject(new Error('Failed to load vendor/opencv.js'));
+            document.head.appendChild(script);
+        });
         // A genuine load failure should not poison future retries
         p.catch(() => { if (cvPromise === p) cvPromise = null; });
         cvPromise = p;
@@ -33,7 +55,10 @@ const loadOpenCV = (): Promise<any> => {
 };
 
 // Resolves true once OpenCV is ready; false on load failure or timeout.
-export const waitForOpenCV = async (timeout = 30000): Promise<boolean> => {
+// The default timeout is generous: 10.8MB over a slow mobile connection can
+// legitimately take a minute, and a premature false leaves the slice button
+// disabled with no way forward.
+export const waitForOpenCV = async (timeout = 120000): Promise<boolean> => {
     try {
         await Promise.race([
             loadOpenCV(),
@@ -46,7 +71,7 @@ export const waitForOpenCV = async (timeout = 30000): Promise<boolean> => {
     }
 };
 
-interface RectLike { x: number; y: number; width: number; height: number }
+export interface RectLike { x: number; y: number; width: number; height: number }
 
 const unionRect = (a: RectLike, b: RectLike): RectLike => {
     const x = Math.min(a.x, b.x);
@@ -65,7 +90,7 @@ const gapY = (a: RectLike, b: RectLike) => Math.max(0, Math.max(a.y, b.y) - Math
  * Merges fragments that belong to the same sticker (e.g. a floating caption
  * under its character): pieces that overlap or sit very close get unioned.
  */
-const mergeFragments = (boxes: RectLike[], cellW: number, cellH: number): RectLike[] => {
+export const mergeFragments = (boxes: RectLike[], cellW: number, cellH: number): RectLike[] => {
     const merged = boxes.map(b => ({ ...b }));
     let changed = true;
     while (changed) {
@@ -90,7 +115,7 @@ const mergeFragments = (boxes: RectLike[], cellW: number, cellH: number): RectLi
  * when the layout doesn't resolve to the expected structure — the caller
  * then falls back to uniform-cell assignment.
  */
-const clusterToGrid = (boxes: RectLike[], rows: number, cols: number, cellW: number, cellH: number): RectLike[] | null => {
+export const clusterToGrid = (boxes: RectLike[], rows: number, cols: number, cellW: number, cellH: number): RectLike[] | null => {
     if (boxes.length === 0 || boxes.length > rows * cols) return null;
 
     const byY = [...boxes].sort((a, b) => (a.y + a.height / 2) - (b.y + b.height / 2));
@@ -141,7 +166,7 @@ const clusterToGrid = (boxes: RectLike[], rows: number, cols: number, cellW: num
  * Fallback: assign every box to its uniform grid cell by centroid and union
  * per cell (works when the sheet layout is close to mathematically even).
  */
-const uniformAssign = (boxes: RectLike[], rows: number, cols: number, totalW: number, totalH: number): RectLike[] => {
+export const uniformAssign = (boxes: RectLike[], rows: number, cols: number, totalW: number, totalH: number): RectLike[] => {
     const cellW = totalW / cols;
     const cellH = totalH / rows;
     const cells: (RectLike | null)[] = new Array(rows * cols).fill(null);

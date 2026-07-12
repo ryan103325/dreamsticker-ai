@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "postinstall": "node scripts/copy-opencv.mjs",
+    "prebuild": "node scripts/copy-opencv.mjs",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

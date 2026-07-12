@@ -37,6 +37,12 @@ self.addEventListener('fetch', (event) => {
     const url = new URL(request.url);
     if (url.origin !== self.location.origin) return; // never touch API calls
 
+    // vendor/ holds opencv.js (10.8MB). Tee-ing a body that large for
+    // cache.put can stall the original stream (backpressure) and the script
+    // never finishes loading — let the browser fetch it directly and rely on
+    // normal HTTP caching instead.
+    if (url.pathname.includes('/vendor/')) return;
+
     // App navigations: network-first, offline fallback to the cached shell
     if (request.mode === 'navigate') {
         event.respondWith(

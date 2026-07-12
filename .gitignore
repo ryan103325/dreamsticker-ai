@@ -30,3 +30,6 @@ dist-ssr
 # Playwright
 test-results/
 playwright-report/
+
+# Generated vendor assets (copied from node_modules on install)
+public/vendor/
