@@ -45,6 +45,9 @@ jobs:
           CI: true
           # Optional: enables the Google Sign-In button when configured in repo secrets
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+          # Sentry error reporting (DSN is a public ingest address, not a secret).
+          # Forks: replace with your own DSN or delete this line to disable.
+          VITE_SENTRY_DSN: https://d0392d462b00f60bdc0c7a89554067d5@o4511716388503552.ingest.us.sentry.io/4511716411047936
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4

@@ -13,10 +13,9 @@ export default defineConfig(() => {
     plugins: [react()],
     // @jsquash/webp ships wasm that esbuild's dev pre-bundling breaks;
     // it is dynamically imported only on browsers without native WebP encode.
-    // @techstark/opencv-js is a 13MB emscripten UMD, dynamically imported at
-    // the slicing step — keep both out of dev pre-bundling.
+    // (opencv.js is deliberately NOT bundled at all — see scripts/copy-opencv.mjs.)
     optimizeDeps: {
-      exclude: ['@jsquash/webp', '@techstark/opencv-js'],
+      exclude: ['@jsquash/webp'],
     },
     build: {
       rollupOptions: {

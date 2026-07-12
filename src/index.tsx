@@ -2,6 +2,11 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import './index.css';
+import { initErrorReporting } from './services/errorReporting';
+
+// Sentry error reporting — active only when VITE_SENTRY_DSN was set at
+// build time (production deploys); a no-op for local dev and forks.
+initErrorReporting();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
