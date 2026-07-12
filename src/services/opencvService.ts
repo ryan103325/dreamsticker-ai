@@ -120,6 +120,15 @@ const gapY = (a: RectLike, b: RectLike) => Math.max(0, Math.max(a.y, b.y) - Math
 /**
  * Merges fragments that belong to the same sticker (e.g. a floating caption
  * under its character): pieces that overlap or sit very close get unioned.
+ *
+ * Thresholds must stay safely BELOW the smallest gap the generation prompts
+ * guarantee BETWEEN cells (documented as "at least 30px" — see the
+ * SAFETY/ENGINEERING GAP rules in geminiService.ts), or fragments from
+ * different stickers get glued into one. The vertical threshold used to be
+ * cellH*0.3 (96px on a 320px cell — 3x the guaranteed minimum), which
+ * collapsed an entire realistic 4x4 sheet into a single box; 0.08/0.05 keep
+ * comfortable margin under a 30px real-world gap while still catching a
+ * caption sitting close under its own character.
  */
 export const mergeFragments = (boxes: RectLike[], cellW: number, cellH: number): RectLike[] => {
     const merged = boxes.map(b => ({ ...b }));
@@ -128,7 +137,7 @@ export const mergeFragments = (boxes: RectLike[], cellW: number, cellH: number):
         changed = false;
         outer: for (let i = 0; i < merged.length; i++) {
             for (let j = i + 1; j < merged.length; j++) {
-                if (gapX(merged[i], merged[j]) < cellW * 0.1 && gapY(merged[i], merged[j]) < cellH * 0.3) {
+                if (gapX(merged[i], merged[j]) < cellW * 0.05 && gapY(merged[i], merged[j]) < cellH * 0.08) {
                     merged[i] = unionRect(merged[i], merged[j]);
                     merged.splice(j, 1);
                     changed = true;
