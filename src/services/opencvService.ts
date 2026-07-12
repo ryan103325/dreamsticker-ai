@@ -1,63 +1,89 @@
 
+import { blobToDataUrl } from './utils';
+
 /**
  * OpenCV Service for Green Screen Auto-Slicing
- * Uses OpenCV.js to detect the background, find content contours, and slice
- * characters out of a grid sheet.
  *
- * OpenCV.js is SELF-HOSTED: scripts/copy-opencv.mjs copies it from the
- * @techstark/opencv-js npm package into public/vendor/ (postinstall), and
- * it is injected as a classic <script> tag on demand. Two hard-won
- * constraints shape this:
- * - It must NOT go through the bundler: the emscripten UMD does not survive
- *   Rollup's CommonJS interop (initializes in dev/Node, silently never
- *   becomes ready in a production build).
- * - window.cv is a fake thenable whose `then` resolves to itself — `await`
- *   loops forever and freezes the tab. Poll cv.Mat / use
- *   onRuntimeInitialized instead; never await it.
+ * ALL OpenCV work runs inside public/opencv-worker.js, a dedicated Web
+ * Worker — the main thread never loads opencv.js or touches a cv.Mat.
+ *
+ * History: opencv.js is self-hosted (scripts/copy-opencv.mjs copies it from
+ * the @techstark/opencv-js npm package into public/vendor/, postinstall)
+ * because bundling it silently broke in production (the emscripten UMD
+ * initializes fine under Node/dev but its wasm runtime never signals ready
+ * inside a Rollup-bundled dynamic import). Loading the self-hosted file via
+ * a <script> tag fixed THAT bug, but revealed a second, worse one:
+ * instantiating a ~10.8MB wasm module on the renderer's main thread blocks
+ * it long enough that Chrome shows the "Page Unresponsive" dialog on real
+ * hardware — every button on the page appears frozen, not just the slicer,
+ * because the whole main thread is stalled. Running it in a worker fixes
+ * this at the root: the main thread is never blocked, no matter how slow
+ * OpenCV's init or the slicing itself is.
+ *
+ * The worker is deliberately a plain, hand-authored classic (non-module)
+ * script in public/ (same treatment as public/sw.js and public/vendor/
+ * opencv.js) instead of a Vite-bundled worker: opencv.js is a UMD bundle
+ * that requires importScripts(), which only exists in classic workers, and
+ * keeping it out of the bundler sidesteps the exact bundling failure that
+ * caused the original bug.
  */
 
-let cvPromise: Promise<any> | null = null;
+let worker: Worker | null = null;
+let readyPromise: Promise<void> | null = null;
+let nextRequestId = 0;
+const pending = new Map<number, { resolve: (blobs: Blob[]) => void; reject: (e: Error) => void }>();
 
-const OPENCV_URL = `${import.meta.env.BASE_URL}vendor/opencv.js`;
+const WORKER_URL = `${import.meta.env.BASE_URL}opencv-worker.js`;
 
-const loadOpenCV = (): Promise<any> => {
-    if (!cvPromise) {
-        const p = new Promise<any>((resolve, reject) => {
-            const existing = (window as any).cv;
-            if (existing?.Mat) return resolve(existing);
-
-            const script = document.createElement('script');
-            script.async = true;
-            script.src = OPENCV_URL;
-            script.onload = () => {
-                const cv = (window as any).cv;
-                if (!cv) return reject(new Error('opencv.js loaded but window.cv is missing'));
-                if (cv.Mat) return resolve(cv);
-                // Wait for the wasm runtime: callback + poll (the callback
-                // alone can be missed if the runtime finished before we
-                // assigned it).
-                cv.onRuntimeInitialized = () => resolve(cv);
-                const poll = setInterval(() => {
-                    if ((window as any).cv?.Mat) {
-                        clearInterval(poll);
-                        resolve((window as any).cv);
-                    }
-                }, 250);
-            };
-            script.onerror = () => reject(new Error('Failed to load vendor/opencv.js'));
-            document.head.appendChild(script);
-        });
-        // A genuine load failure should not poison future retries
-        p.catch(() => { if (cvPromise === p) cvPromise = null; });
-        cvPromise = p;
-    }
-    return cvPromise;
+const getWorker = (): Worker => {
+    if (worker) return worker;
+    // Classic (non-module) worker: opencv-worker.js uses importScripts().
+    worker = new Worker(WORKER_URL);
+    worker.onmessage = (e: MessageEvent) => {
+        const msg = e.data;
+        if (msg.type === 'slice-result') {
+            pending.get(msg.id)?.resolve(msg.blobs);
+            pending.delete(msg.id);
+        } else if (msg.type === 'slice-error') {
+            pending.get(msg.id)?.reject(new Error(msg.message));
+            pending.delete(msg.id);
+        }
+        // 'ready' / 'init-error' are consumed by the one-shot listener that
+        // loadOpenCV() attaches per call, not here.
+    };
+    worker.onerror = (e) => {
+        console.error('[opencv-worker] uncaught error:', e.message);
+    };
+    return worker;
 };
 
-// Resolves true once OpenCV is ready; false on load failure or timeout.
-// The default timeout is generous: 10.8MB over a slow mobile connection can
-// legitimately take a minute, and a premature false leaves the slice button
-// disabled with no way forward.
+const loadOpenCV = (): Promise<void> => {
+    if (!readyPromise) {
+        const w = getWorker();
+        const p = new Promise<void>((resolve, reject) => {
+            const onMessage = (e: MessageEvent) => {
+                if (e.data?.type === 'ready') {
+                    w.removeEventListener('message', onMessage);
+                    resolve();
+                } else if (e.data?.type === 'init-error') {
+                    w.removeEventListener('message', onMessage);
+                    reject(new Error(e.data.message));
+                }
+            };
+            w.addEventListener('message', onMessage);
+            w.postMessage({ type: 'init' });
+        });
+        // A genuine load failure should not poison future retries
+        p.catch(() => { if (readyPromise === p) readyPromise = null; });
+        readyPromise = p;
+    }
+    return readyPromise;
+};
+
+// Resolves true once OpenCV is ready in the worker; false on load failure or
+// timeout. The default timeout is generous: 10.8MB over a slow mobile
+// connection can legitimately take a minute, and a premature false leaves
+// the slice button disabled with no way forward.
 export const waitForOpenCV = async (timeout = 120000): Promise<boolean> => {
     try {
         await Promise.race([
@@ -72,6 +98,11 @@ export const waitForOpenCV = async (timeout = 120000): Promise<boolean> => {
 };
 
 export interface RectLike { x: number; y: number; width: number; height: number }
+
+// ---- Pure geometry helpers, exported for unit tests. ----
+// NOTE: identical copies live in public/opencv-worker.js — a classic worker
+// can't import ES modules, so opencv.js's importScripts() requirement forces
+// this duplication. Keep both copies in sync if the algorithm changes.
 
 const unionRect = (a: RectLike, b: RectLike): RectLike => {
     const x = Math.min(a.x, b.x);
@@ -195,36 +226,15 @@ export const uniformAssign = (boxes: RectLike[], rows: number, cols: number, tot
 };
 
 /**
- * Suppresses green spill on the semi-transparent edge band produced by the
- * alpha blur: any greenish edge pixel gets its green channel clamped to
- * max(red, blue), removing the tell-tale green fringe around cut stickers.
- */
-const despillCanvas = (canvas: HTMLCanvasElement) => {
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const d = imgData.data;
-    for (let i = 0; i < d.length; i += 4) {
-        const a = d[i + 3];
-        if (a === 0 || a >= 250) continue; // only the soft edge band
-        const m = Math.max(d[i], d[i + 2]);
-        if (d[i + 1] > m) d[i + 1] = m;
-    }
-    ctx.putImageData(imgData, 0, 0);
-};
-
-/**
- * Main function to process a sheet using CONTOUR + GAP-CLUSTERING SLICING.
+ * Slices a sheet using CONTOUR + GAP-CLUSTERING SLICING, run entirely inside
+ * the opencv-worker (see public/opencv-worker.js for the full algorithm:
+ * background masking, contour detection, fragment merge, grid clustering
+ * with a uniform-cell fallback, alpha softening, despill, and resampling).
  *
- * Algorithm:
- * 1. Smart Background Masking (Green screen via HSV, or generic solid color).
- * 2. Find ALL content contours on the full mask.
- * 3. Merge fragments belonging to the same sticker (character + caption).
- * 4. Cluster merged blobs into rows/columns by the ACTUAL gaps between them
- *    (robust to uneven, drifted grids); fall back to uniform-cell centroid
- *    assignment when the layout doesn't resolve cleanly.
- * 5. Crop each sticker from the alpha-applied source, soften + despill edges,
- *    and fit to the target LINE dimensions with high-quality resampling.
+ * The image is decoded on the main thread (fetch + createImageBitmap, both
+ * lightweight/native) and the resulting ImageBitmap is transferred
+ * (zero-copy) to the worker; results come back as PNG Blobs, converted here
+ * to the data-URL strings the rest of the app expects.
  */
 export const processGreenScreenAndSlice = async (
     imageUrl: string,
@@ -238,170 +248,20 @@ export const processGreenScreenAndSlice = async (
     const isCvReady = await waitForOpenCV();
     if (!isCvReady) throw new Error("OpenCV is not loaded.");
 
-    const cv: any = await loadOpenCV();
+    const w = getWorker();
+    const response = await fetch(imageUrl);
+    const blob = await response.blob();
+    const imageBitmap = await createImageBitmap(blob);
 
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = "Anonymous";
-        img.onload = () => {
-            try {
-                // 1. Setup OpenCV Mats
-                const src = cv.imread(img); // RGBA
-                const cvt = new cv.Mat();
-                const mask = new cv.Mat();
-
-                // 2. Smart Background Detection
-                cv.cvtColor(src, cvt, cv.COLOR_RGBA2RGB);
-
-                // Sample Top-Left Pixel
-                const p0 = cvt.ucharPtr(0, 0);
-                const bgR = p0[0], bgG = p0[1], bgB = p0[2];
-
-                // Check if it looks like Green Screen (HSV check)
-                const hsvPix = new cv.Mat();
-                const srcPix = new cv.Mat(1, 1, cv.CV_8UC3, new cv.Scalar(bgR, bgG, bgB));
-                cv.cvtColor(srcPix, hsvPix, cv.COLOR_RGB2HSV);
-                const h0 = hsvPix.data[0]; // Hue 0-179
-                const s0 = hsvPix.data[1]; // Sat 0-255
-                srcPix.delete(); hsvPix.delete();
-
-                // Green Hue ~60 (35-85) and sufficient saturation
-                const isGreenBG = (h0 >= 35 && h0 <= 85) && (s0 > 20);
-
-                if (isGreenBG) {
-                    // --- GREEN SCREEN MODE (Robust HSV) ---
-                    const hsv = new cv.Mat();
-                    cv.cvtColor(src, hsv, cv.COLOR_RGBA2RGB);
-                    cv.cvtColor(hsv, hsv, cv.COLOR_RGB2HSV);
-
-                    const low = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [35, 40, 40, 0]);
-                    const high = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [85, 255, 255, 255]);
-                    cv.inRange(hsv, low, high, mask);
-
-                    low.delete(); high.delete(); hsv.delete();
-                } else {
-                    // --- GENERIC SOLID COLOR MODE (Color Difference) ---
-                    const tol = 30;
-                    const low = new cv.Mat(cvt.rows, cvt.cols, cvt.type(), [Math.max(0, bgR - tol), Math.max(0, bgG - tol), Math.max(0, bgB - tol), 0]);
-                    const high = new cv.Mat(cvt.rows, cvt.cols, cvt.type(), [Math.min(255, bgR + tol), Math.min(255, bgG + tol), Math.min(255, bgB + tol), 255]);
-
-                    cv.inRange(cvt, low, high, mask); // Matches BG -> 255
-                    low.delete(); high.delete();
-                }
-
-                // Invert Mask: BG(255) -> 0, Content(0) -> 255
-                cv.bitwise_not(mask, mask);
-
-                // Morphological Cleanup to remove noise
-                const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
-                cv.morphologyEx(mask, mask, cv.MORPH_OPEN, kernel);
-
-                // *** Apply Transparency to Source (for final cropping) ***
-                const rgbaPlanes = new cv.MatVector();
-                cv.split(src, rgbaPlanes);
-                const r = rgbaPlanes.get(0);
-                const g = rgbaPlanes.get(1);
-                const b = rgbaPlanes.get(2);
-                const resultPlanes = new cv.MatVector();
-                resultPlanes.push_back(r); resultPlanes.push_back(g); resultPlanes.push_back(b);
-                resultPlanes.push_back(mask); // Mask is now Alpha
-                cv.merge(resultPlanes, src);
-                r.delete(); g.delete(); b.delete(); rgbaPlanes.delete(); resultPlanes.delete();
-
-                // === CONTOUR + GAP-CLUSTERING SLICING ===
-
-                const totalH = src.rows;
-                const totalW = src.cols;
-                const cellW = totalW / cols;
-                const cellH = totalH / rows;
-
-                const contours = new cv.MatVector();
-                const hierarchy = new cv.Mat();
-                cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-                const boxes: RectLike[] = [];
-                for (let k = 0; k < contours.size(); ++k) {
-                    const rect = cv.boundingRect(contours.get(k));
-                    if (rect.width < 8 || rect.height < 8) continue; // noise specks
-                    boxes.push({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
-                }
-                contours.delete(); hierarchy.delete();
-
-                const merged = mergeFragments(boxes, cellW, cellH);
-                let finalRects = clusterToGrid(merged, rows, cols, cellW, cellH);
-                if (!finalRects) {
-                    console.warn('[Slicer] Gap clustering did not resolve cleanly; using uniform-grid fallback.');
-                    finalRects = uniformAssign(merged, rows, cols, totalW, totalH);
-                }
-
-                const slicedImages: string[] = [];
-
-                for (const tight of finalRects) {
-                    const x1 = Math.max(0, Math.round(tight.x) - 2);
-                    const y1 = Math.max(0, Math.round(tight.y) - 2);
-                    const x2 = Math.min(totalW, Math.round(tight.x + tight.width) + 2);
-                    const y2 = Math.min(totalH, Math.round(tight.y + tight.height) + 2);
-                    const w = x2 - x1;
-                    const h = y2 - y1;
-                    if (w <= 8 || h <= 8) continue;
-
-                    const absRect = new cv.Rect(x1, y1, w, h);
-                    const finalRoi = src.roi(absRect);
-
-                    // Soft edge: Gaussian blur on the alpha channel only
-                    const channels = new cv.MatVector();
-                    cv.split(finalRoi, channels);
-                    const alphaChannel = channels.get(3);
-                    const ksize = new cv.Size(5, 5);
-                    cv.GaussianBlur(alphaChannel, alphaChannel, ksize, 0, 0);
-                    channels.set(3, alphaChannel);
-                    cv.merge(channels, finalRoi);
-                    alphaChannel.delete();
-                    channels.delete();
-
-                    const tempCanvas = document.createElement('canvas');
-                    tempCanvas.width = w;
-                    tempCanvas.height = h;
-                    cv.imshow(tempCanvas, finalRoi);
-                    finalRoi.delete();
-
-                    // Green spill suppression on the soft edge band
-                    despillCanvas(tempCanvas);
-
-                    const cellCanvas = document.createElement('canvas');
-                    cellCanvas.width = targetW;
-                    cellCanvas.height = targetH;
-                    const ctx = cellCanvas.getContext('2d');
-                    if (!ctx) continue;
-                    ctx.imageSmoothingEnabled = true;
-                    ctx.imageSmoothingQuality = 'high';
-
-                    const availableW = targetW - (padding * 2);
-                    const availableH = targetH - (padding * 2);
-
-                    // COVER = emoji full-bleed; CONTAIN = sticker with margins
-                    const scale = fit === 'COVER'
-                        ? Math.max(availableW / w, availableH / h)
-                        : Math.min(availableW / w, availableH / h);
-
-                    const drawW = w * scale;
-                    const drawH = h * scale;
-                    ctx.drawImage(tempCanvas, 0, 0, w, h, (targetW - drawW) / 2, (targetH - drawH) / 2, drawW, drawH);
-                    slicedImages.push(cellCanvas.toDataURL('image/png'));
-                }
-
-                // Cleanup
-                src.delete(); cvt.delete(); mask.delete();
-                kernel.delete();
-
-                resolve(slicedImages);
-
-            } catch (e) {
-                console.error("OpenCV Processing Error:", e);
-                reject(e);
-            }
-        };
-        img.onerror = () => reject(new Error("Failed to load image for OpenCV processing"));
-        img.src = imageUrl;
+    const id = nextRequestId++;
+    const resultPromise = new Promise<Blob[]>((resolve, reject) => {
+        pending.set(id, { resolve, reject });
     });
+    w.postMessage(
+        { type: 'slice', id, imageBitmap, rows, cols, targetW, targetH, padding, fit },
+        [imageBitmap]
+    );
+
+    const blobs = await resultPromise;
+    return Promise.all(blobs.map(blobToDataUrl));
 };
