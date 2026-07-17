@@ -1150,6 +1150,18 @@ export const App = () => {
                 return;
             }
 
+            // A count mismatch almost always means the quantity setting does
+            // not match the sheet's actual grid (e.g. a 4x4 sheet sliced with
+            // the default 8) — surface it loudly instead of failing silently.
+            if (allSlicedImages.length !== stickerQuantity) {
+                toast(
+                    t('sliceCountMismatch')
+                        .replace('{got}', String(allSlicedImages.length))
+                        .replace('{want}', String(stickerQuantity)),
+                    'error'
+                );
+            }
+
             const newStickers: GeneratedImage[] = allSlicedImages.map((url, idx) => ({
                 id: stickerConfigs[idx]?.id || `s-${idx}`,
                 url,
