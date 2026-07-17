@@ -73,6 +73,7 @@ export const translations = {
         zipOversizedWarning: "已盡量壓縮，但仍有檔案超過平台大小上限：",
         stopGenerating: "停止生成",
         modelUnavailableWarning: "注意：以下生圖模型目前無法使用，生成時將自動改用備用模型：",
+        sliceCountMismatch: "切出 {got} 張，與設定的 {want} 張不符——請確認「貼圖數量」設定與底圖的網格數一致（例如 4×4 底圖要選 16），再重新切割。",
 
         // Staged loader
         stageAnalyze: "分析角色",
@@ -442,6 +443,7 @@ export const translations = {
         zipOversizedWarning: "Compressed as far as possible, but some files still exceed the platform size limit: ",
         stopGenerating: "Stop Generating",
         modelUnavailableWarning: "Warning: these image models are currently unavailable; generation will automatically use fallback models: ",
+        sliceCountMismatch: "Sliced {got} stickers but {want} were expected — make sure the sticker-count setting matches your sheet's grid (e.g. pick 16 for a 4×4 sheet), then slice again.",
 
         // Staged loader
         stageAnalyze: "Analyzing character",

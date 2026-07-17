@@ -11,7 +11,7 @@
  *   must never be cached.
  */
 
-const CACHE = 'dreamsticker-v1';
+const CACHE = 'dreamsticker-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './logo.png', './favicon.png'];
 
 self.addEventListener('install', (event) => {
@@ -43,10 +43,15 @@ self.addEventListener('fetch', (event) => {
     // normal HTTP caching instead.
     if (url.pathname.includes('/vendor/')) return;
 
-    // App navigations: network-first, offline fallback to the cached shell
+    // App navigations: network-first, offline fallback to the cached shell.
+    // cache:'no-cache' forces conditional revalidation past the HTTP cache —
+    // GitHub Pages serves index.html with max-age=600, which otherwise keeps
+    // users on a stale build for up to 10 minutes after every deploy (a 304
+    // when unchanged, so the cost is one cheap roundtrip). Fetch by URL:
+    // passing init alongside a mode:'navigate' Request throws.
     if (request.mode === 'navigate') {
         event.respondWith(
-            fetch(request)
+            fetch(request.url, { cache: 'no-cache' })
                 .then((res) => {
                     const copy = res.clone();
                     caches.open(CACHE).then((cache) => cache.put('./index.html', copy));
