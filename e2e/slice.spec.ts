@@ -63,6 +63,81 @@ test('upload-sheet flow slices a green-screen grid without any API calls', async
         .toBeGreaterThanOrEqual(8);
 });
 
+test('sliced sticker pixels are correct, not corrupted (regression for the ROI-stride bug)', async ({ page }) => {
+    test.setTimeout(120_000);
+
+    // Tight ~30px gaps matching the app's own documented minimum spec
+    // ("at least 30px green river" — see geminiService.ts) on a REAL
+    // 16-qty LINE_STICKER layout (cellW=370, cellH=320). A roi() crop that
+    // isn't read back correctly (the bug this test guards against) produces
+    // a "TV static" horizontal-banding artifact instead of the solid fill.
+    await page.goto('/');
+    await page.getByPlaceholder(/API KEY/i).fill('test-key-1234567890');
+    await page.getByRole('button', { name: /開始創作/ }).click();
+    await page.getByRole('heading', { name: '上傳底圖' }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: '16', exact: true }).click();
+
+    const base64 = await page.evaluate(() => {
+        const cellW = 370, cellH = 320, cols = 4, rows = 4, margin = 15;
+        const c = document.createElement('canvas');
+        c.width = cellW * cols; c.height = cellH * rows;
+        const ctx = c.getContext('2d')!;
+        ctx.fillStyle = '#00FF00';
+        ctx.fillRect(0, 0, c.width, c.height);
+        // Cell 0: solid red with a white outline stroke (mimics a real
+        // sticker's thick white border).
+        ctx.fillStyle = '#e74c3c';
+        ctx.fillRect(margin, margin, cellW - margin * 2, cellH - margin * 2);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(margin + 4, margin + 4, cellW - margin * 2 - 8, cellH - margin * 2 - 8);
+        // Fill the remaining 15 cells with distinct non-green colors so the
+        // grid still resolves to 16 separate stickers.
+        const colors = ['#3498db', '#f39c12', '#9b59b6', '#c0392b', '#e67e22', '#2c3e50', '#d35400',
+                         '#8e44ad', '#2980b9', '#c0392b', '#e67e22', '#7f8c8d', '#d35400', '#e74c3c', '#3498db'];
+        let ci = 0;
+        for (let r = 0; r < rows; r++) for (let col = 0; col < cols; col++) {
+            if (r === 0 && col === 0) continue; // already drawn above
+            ctx.fillStyle = colors[ci++];
+            ctx.fillRect(col * cellW + margin, r * cellH + margin, cellW - margin * 2, cellH - margin * 2);
+        }
+        return c.toDataURL('image/png').split(',')[1];
+    });
+    await page.locator('input[type=file]').last().setInputFiles({
+        name: 'sheet.png', mimeType: 'image/png', buffer: Buffer.from(base64, 'base64'),
+    });
+
+    const sliceButton = page.getByRole('button', { name: /綠幕自動切割/ });
+    await sliceButton.waitFor({ state: 'visible', timeout: 60_000 });
+    await sliceButton.click();
+    await expect(page.getByText(/貼圖完成/)).toBeVisible({ timeout: 60_000 });
+
+    const cards = page.locator('main img');
+    await expect.poll(async () => cards.count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(16);
+
+    // Decode the first (red) sticker and verify its center pixel is
+    // actually red -- a corrupted crop would show scrambled/off-color noise.
+    const pixel = await page.evaluate(async () => {
+        const img = document.querySelector('main img') as HTMLImageElement;
+        const bitmap = await createImageBitmap(img);
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width; canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(bitmap, 0, 0);
+        const d = ctx.getImageData(Math.floor(bitmap.width / 2), Math.floor(bitmap.height / 2), 1, 1).data;
+        return { r: d[0], g: d[1], b: d[2], a: d[3] };
+    });
+
+    // #e74c3c = rgb(231, 76, 60). Allow generous tolerance for the
+    // alpha-edge blur / despill / resampling pipeline, but corrupted
+    // "static" pixels would be wildly random, not close to red.
+    expect(pixel.r).toBeGreaterThan(150);
+    expect(pixel.g).toBeLessThan(150);
+    expect(pixel.b).toBeLessThan(150);
+    expect(pixel.a).toBeGreaterThan(100);
+});
+
 test('main thread stays responsive while OpenCV initializes (no Page Unresponsive freeze)', async ({ page }) => {
     test.setTimeout(120_000);
 

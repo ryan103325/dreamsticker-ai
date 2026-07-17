@@ -57,6 +57,9 @@ const unionRect = (a, b) => {
 const gapX = (a, b) => Math.max(0, Math.max(a.x, b.x) - Math.min(a.x + a.width, b.x + b.width));
 const gapY = (a, b) => Math.max(0, Math.max(a.y, b.y) - Math.min(a.y + a.height, b.y + b.height));
 
+// Thresholds must stay safely below the smallest gap the generation
+// prompts guarantee between cells ("at least 30px", see geminiService.ts).
+// Keep in sync with src/services/opencvService.ts's copy.
 const mergeFragments = (boxes, cellW, cellH) => {
     const merged = boxes.map((b) => ({ ...b }));
     let changed = true;
@@ -64,7 +67,7 @@ const mergeFragments = (boxes, cellW, cellH) => {
         changed = false;
         outer: for (let i = 0; i < merged.length; i++) {
             for (let j = i + 1; j < merged.length; j++) {
-                if (gapX(merged[i], merged[j]) < cellW * 0.1 && gapY(merged[i], merged[j]) < cellH * 0.3) {
+                if (gapX(merged[i], merged[j]) < cellW * 0.05 && gapY(merged[i], merged[j]) < cellH * 0.08) {
                     merged[i] = unionRect(merged[i], merged[j]);
                     merged.splice(j, 1);
                     changed = true;
@@ -272,11 +275,22 @@ const sliceSheet = async ({ imageBitmap, rows, cols, targetW, targetH, padding, 
         alphaChannel.delete();
         channels.delete();
 
-        // Copy the Mat's raw bytes out BEFORE deleting it (delete() frees
-        // the underlying wasm memory the Uint8Array view points at).
-        const roiImgData = new ImageData(new Uint8ClampedArray(finalRoi.data), w, h);
-        despillImageData(roiImgData);
+        // finalRoi is a roi() VIEW sharing src's row stride (the full sheet
+        // width), not a tightly-packed w-wide buffer -- reading .data
+        // directly off it misreads each row at the wrong offset,
+        // progressively drifting into the next row of the ORIGINAL sheet
+        // (this produced the "TV static" bug). cv.imshow's own source
+        // avoids exactly this by always convertTo()-ing into a fresh Mat
+        // before reading .data (Mat::create always allocates contiguous
+        // memory); mirror that same proven approach here since cv.imshow
+        // itself requires an HTMLCanvasElement and rejects OffscreenCanvas.
+        const contiguous = new cv.Mat();
+        finalRoi.convertTo(contiguous, cv.CV_8U, 1, 0);
         finalRoi.delete();
+
+        const roiImgData = new ImageData(new Uint8ClampedArray(contiguous.data), w, h);
+        despillImageData(roiImgData);
+        contiguous.delete();
 
         const tempCanvas = new OffscreenCanvas(w, h);
         const tempCtx = tempCanvas.getContext('2d');
