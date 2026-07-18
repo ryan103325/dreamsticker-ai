@@ -201,6 +201,101 @@ test('sheet with a white margin still slices correctly (regression for corner-pi
     expect(greenPct).toBeLessThan(3);
 });
 
+test('tightly-packed sheet with touching neighbors still yields every cell (cell-grid fallback)', async ({ page }) => {
+    test.setTimeout(120_000);
+
+    // Mimics real hand-packed sheets (like the user's pig sheet): stickers
+    // fill their cells edge-to-edge so neighboring white outlines TOUCH,
+    // fusing into one connected component. Contour clustering cannot split
+    // that; the cell-grid fallback must still produce one sticker per cell.
+    await page.goto('/');
+    await page.getByPlaceholder(/API KEY/i).fill('test-key-1234567890');
+    await page.getByRole('button', { name: /開始創作/ }).click();
+    await page.getByRole('heading', { name: '上傳底圖' }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: '16', exact: true }).click();
+
+    const base64 = await page.evaluate(() => {
+        const cols = 4, rows = 4, cellW = 370, cellH = 320;
+        const c = document.createElement('canvas');
+        c.width = cellW * cols; c.height = cellH * rows;
+        const ctx = c.getContext('2d')!;
+        ctx.fillStyle = '#00FF00';
+        ctx.fillRect(0, 0, c.width, c.height);
+        const colors = ['#e74c3c', '#3498db', '#f39c12', '#9b59b6', '#c0392b', '#e67e22', '#2c3e50', '#d35400',
+                        '#8e44ad', '#2980b9', '#b03a2e', '#ca6f1e', '#7f8c8d', '#a04000', '#cb4335', '#2471a3'];
+        for (let r = 0; r < rows; r++) for (let col = 0; col < cols; col++) {
+            const x = col * cellW, y = r * cellH;
+            // white outline fills the WHOLE cell -> touches all neighbors
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x + 2, y + 2, cellW - 4, cellH - 4);
+            ctx.fillStyle = colors[r * cols + col];
+            ctx.fillRect(x + 14, y + 14, cellW - 28, cellH - 28);
+        }
+        return c.toDataURL('image/png').split(',')[1];
+    });
+    await page.locator('input[type=file]').last().setInputFiles({
+        name: 'sheet.png', mimeType: 'image/png', buffer: Buffer.from(base64, 'base64'),
+    });
+
+    const sliceButton = page.getByRole('button', { name: /綠幕自動切割/ });
+    await expect(sliceButton).toBeVisible({ timeout: 60_000 });
+    await sliceButton.click();
+    await expect(page.getByText(/貼圖完成/)).toBeVisible({ timeout: 60_000 });
+
+    const cards = page.locator('main img');
+    await expect.poll(async () => cards.count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(16);
+});
+
+test('40-sticker (5x8) tightly-packed sheet slices into all 40 cells', async ({ page }) => {
+    test.setTimeout(120_000);
+
+    // Reproduces a real user report: a 40-qty golden-retriever sheet (5 cols
+    // x 8 rows per STICKER_SPECS[40]) with captions and outlines packed so
+    // tight that contour clustering collapsed it into 6 mis-cropped pieces.
+    // The cell-grid fallback must yield one correctly-placed crop per cell.
+    await page.goto('/');
+    await page.getByPlaceholder(/API KEY/i).fill('test-key-1234567890');
+    await page.getByRole('button', { name: /開始創作/ }).click();
+    await page.getByRole('heading', { name: '上傳底圖' }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: '40', exact: true }).click();
+
+    const base64 = await page.evaluate(() => {
+        const cols = 5, rows = 8, cellW = 370, cellH = 320;
+        const c = document.createElement('canvas');
+        c.width = cellW * cols; c.height = cellH * rows;
+        const ctx = c.getContext('2d')!;
+        ctx.fillStyle = '#00FF00';
+        ctx.fillRect(0, 0, c.width, c.height);
+        for (let r = 0; r < rows; r++) for (let col = 0; col < cols; col++) {
+            const x = col * cellW, y = r * cellH;
+            // caption blob at the top + character body below, both with
+            // outlines that reach the cell edge (touching the neighbors)
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x + 2, y + 2, cellW - 4, cellH - 4);
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillRect(x + 20, y + 12, cellW - 40, 60);           // caption text
+            ctx.fillStyle = `hsl(${(r * cols + col) * 9}, 70%, 55%)`;
+            ctx.beginPath();
+            ctx.arc(x + cellW / 2, y + cellH / 2 + 40, 90, 0, Math.PI * 2); // body
+            ctx.fill();
+        }
+        return c.toDataURL('image/png').split(',')[1];
+    });
+    await page.locator('input[type=file]').last().setInputFiles({
+        name: 'sheet.png', mimeType: 'image/png', buffer: Buffer.from(base64, 'base64'),
+    });
+
+    const sliceButton = page.getByRole('button', { name: /綠幕自動切割/ });
+    await expect(sliceButton).toBeVisible({ timeout: 60_000 });
+    await sliceButton.click();
+    await expect(page.getByText(/貼圖完成/)).toBeVisible({ timeout: 60_000 });
+
+    const cards = page.locator('main img');
+    await expect.poll(async () => cards.count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(40);
+});
+
 test('main thread stays responsive while OpenCV initializes (no Page Unresponsive freeze)', async ({ page }) => {
     test.setTimeout(120_000);
 

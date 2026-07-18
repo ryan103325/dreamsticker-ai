@@ -33,7 +33,11 @@ let readyPromise: Promise<void> | null = null;
 let nextRequestId = 0;
 const pending = new Map<number, { resolve: (blobs: Blob[]) => void; reject: (e: Error) => void }>();
 
-const WORKER_URL = `${import.meta.env.BASE_URL}opencv-worker.js`;
+// ?v= busts every cache layer on each deploy (SW cache-first, HTTP cache):
+// without it, users kept running an outdated slicing engine after updates.
+// typeof guard: vitest imports this module without Vite's define step.
+const BUILD_ID = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'dev';
+const WORKER_URL = `${import.meta.env.BASE_URL}opencv-worker.js?v=${BUILD_ID}`;
 
 const getWorker = (): Worker => {
     if (worker) return worker;
@@ -100,9 +104,12 @@ export const waitForOpenCV = async (timeout = 120000): Promise<boolean> => {
 export interface RectLike { x: number; y: number; width: number; height: number }
 
 // ---- Pure geometry helpers, exported for unit tests. ----
-// NOTE: identical copies live in public/opencv-worker.js — a classic worker
-// can't import ES modules, so opencv.js's importScripts() requirement forces
-// this duplication. Keep both copies in sync if the algorithm changes.
+// NOTE: identical copies of mergeFragments/clusterToGrid live in
+// public/opencv-worker.js — a classic worker can't import ES modules, so
+// opencv.js's importScripts() requirement forces this duplication. Keep both
+// copies in sync if the algorithm changes. (The worker's grid FALLBACK is
+// cellwiseRects, which needs cv/mask and lives only there; it is covered by
+// the tight-sheet E2E test.)
 
 const unionRect = (a: RectLike, b: RectLike): RectLike => {
     const x = Math.min(a.x, b.x);
@@ -202,37 +209,6 @@ export const clusterToGrid = (boxes: RectLike[], rows: number, cols: number, cel
     return result;
 };
 
-/**
- * Fallback: assign every box to its uniform grid cell by centroid and union
- * per cell (works when the sheet layout is close to mathematically even).
- */
-export const uniformAssign = (boxes: RectLike[], rows: number, cols: number, totalW: number, totalH: number): RectLike[] => {
-    const cellW = totalW / cols;
-    const cellH = totalH / rows;
-    const cells: (RectLike | null)[] = new Array(rows * cols).fill(null);
-    for (const rect of boxes) {
-        const cx = rect.x + rect.width / 2;
-        const cy = rect.y + rect.height / 2;
-        const col = Math.min(cols - 1, Math.max(0, Math.floor(cx / cellW)));
-        const row = Math.min(rows - 1, Math.max(0, Math.floor(cy / cellH)));
-        const idx = row * cols + col;
-        cells[idx] = cells[idx] ? unionRect(cells[idx]!, rect) : { ...rect };
-    }
-    // Clamp each union to its own cell neighborhood (20% overflow allowed)
-    const out: RectLike[] = [];
-    for (let idx = 0; idx < cells.length; idx++) {
-        const tight = cells[idx];
-        if (!tight) continue;
-        const row = Math.floor(idx / cols);
-        const col = idx % cols;
-        const x1 = Math.round(Math.max(tight.x, col * cellW - cellW * 0.2, 0));
-        const y1 = Math.round(Math.max(tight.y, row * cellH - cellH * 0.2, 0));
-        const x2 = Math.round(Math.min(tight.x + tight.width, (col + 1) * cellW + cellW * 0.2, totalW));
-        const y2 = Math.round(Math.min(tight.y + tight.height, (row + 1) * cellH + cellH * 0.2, totalH));
-        if (x2 - x1 > 8 && y2 - y1 > 8) out.push({ x: x1, y: y1, width: x2 - x1, height: y2 - y1 });
-    }
-    return out;
-};
 
 /**
  * Slices a sheet using CONTOUR + GAP-CLUSTERING SLICING, run entirely inside

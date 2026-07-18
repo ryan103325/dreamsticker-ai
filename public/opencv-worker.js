@@ -124,29 +124,44 @@ const clusterToGrid = (boxes, rows, cols, cellW, cellH) => {
     return result;
 };
 
-const uniformAssign = (boxes, rows, cols, totalW, totalH) => {
-    const cellW = totalW / cols;
-    const cellH = totalH / rows;
-    const cells = new Array(rows * cols).fill(null);
-    for (const rect of boxes) {
-        const cx = rect.x + rect.width / 2;
-        const cy = rect.y + rect.height / 2;
-        const col = Math.min(cols - 1, Math.max(0, Math.floor(cx / cellW)));
-        const row = Math.min(rows - 1, Math.max(0, Math.floor(cy / cellH)));
-        const idx = row * cols + col;
-        cells[idx] = cells[idx] ? unionRect(cells[idx], rect) : { ...rect };
-    }
+/**
+ * Cell-driven fallback slicing: when contour clustering cannot resolve the
+ * grid — typically a tightly-packed sheet where neighboring stickers'
+ * white outlines physically touch and fuse into one connected component —
+ * slice by the KNOWN grid instead. For each cell, find the bounding box of
+ * mask content strictly inside that cell; cross-cell connections become
+ * irrelevant, and every occupied cell yields exactly one sticker.
+ */
+const cellwiseRects = (cv, mask, rows, cols) => {
+    const totalW = mask.cols, totalH = mask.rows;
+    const cellW = totalW / cols, cellH = totalH / rows;
     const out = [];
-    for (let idx = 0; idx < cells.length; idx++) {
-        const tight = cells[idx];
-        if (!tight) continue;
-        const row = Math.floor(idx / cols);
-        const col = idx % cols;
-        const x1 = Math.round(Math.max(tight.x, col * cellW - cellW * 0.2, 0));
-        const y1 = Math.round(Math.max(tight.y, row * cellH - cellH * 0.2, 0));
-        const x2 = Math.round(Math.min(tight.x + tight.width, (col + 1) * cellW + cellW * 0.2, totalW));
-        const y2 = Math.round(Math.min(tight.y + tight.height, (row + 1) * cellH + cellH * 0.2, totalH));
-        if (x2 - x1 > 8 && y2 - y1 > 8) out.push({ x: x1, y: y1, width: x2 - x1, height: y2 - y1 });
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const x = Math.round(c * cellW), y = Math.round(r * cellH);
+            const w = Math.min(totalW, Math.round((c + 1) * cellW)) - x;
+            const h = Math.min(totalH, Math.round((r + 1) * cellH)) - y;
+            // copyTo -> contiguous cell mask (findContours-safe; never read
+            // pixel data straight off a roi() view)
+            const roiView = mask.roi(new cv.Rect(x, y, w, h));
+            const cellMask = new cv.Mat();
+            roiView.copyTo(cellMask);
+            roiView.delete();
+            const contours = new cv.MatVector();
+            const hier = new cv.Mat();
+            cv.findContours(cellMask, contours, hier, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+            let bx1 = Infinity, by1 = Infinity, bx2 = -1, by2 = -1;
+            for (let k = 0; k < contours.size(); k++) {
+                const b = cv.boundingRect(contours.get(k));
+                if (b.width < 8 || b.height < 8) continue; // noise specks
+                bx1 = Math.min(bx1, b.x); by1 = Math.min(by1, b.y);
+                bx2 = Math.max(bx2, b.x + b.width); by2 = Math.max(by2, b.y + b.height);
+            }
+            contours.delete(); hier.delete(); cellMask.delete();
+            if (bx2 > bx1 && bx2 - bx1 > 8 && by2 - by1 > 8) {
+                out.push({ x: x + bx1, y: y + by1, width: bx2 - bx1, height: by2 - by1 });
+            }
+        }
     }
     return out;
 };
@@ -296,13 +311,8 @@ const sliceSheet = async ({ imageBitmap, rows, cols, targetW, targetH, padding, 
     const merged = mergeFragments(boxes, cellW, cellH);
     let finalRects = clusterToGrid(merged, rows, cols, cellW, cellH);
     if (!finalRects) {
-        // Fall back on the RAW boxes, not the merged ones: when merging has
-        // chained fragments across cells (the reason clustering bailed),
-        // feeding those giant unions to uniformAssign collapses everything
-        // into one center cell. Raw boxes let each fragment land in its own
-        // nearest cell instead.
-        console.warn('[Slicer] Gap clustering did not resolve cleanly; using uniform-grid fallback.');
-        finalRects = uniformAssign(boxes, rows, cols, totalW, totalH);
+        console.warn('[Slicer] Gap clustering did not resolve cleanly; slicing by the known grid instead.');
+        finalRects = cellwiseRects(cv, mask, rows, cols);
     }
 
     const blobs = [];
