@@ -138,6 +138,69 @@ test('sliced sticker pixels are correct, not corrupted (regression for the ROI-s
     expect(pixel.a).toBeGreaterThan(100);
 });
 
+test('sheet with a white margin still slices correctly (regression for corner-pixel background detection)', async ({ page }) => {
+    test.setTimeout(120_000);
+
+    // Real user sheets often carry a white (or flattened-transparent) margin
+    // around the green area. The old single-corner-pixel background probe
+    // then picked WHITE as background, green became "content", and the whole
+    // sheet collapsed into ONE sticker with the green screen still visible.
+    await page.goto('/');
+    await page.getByPlaceholder(/API KEY/i).fill('test-key-1234567890');
+    await page.getByRole('button', { name: /開始創作/ }).click();
+    await page.getByRole('heading', { name: '上傳底圖' }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: '16', exact: true }).click();
+
+    const base64 = await page.evaluate(() => {
+        const cols = 4, rows = 4, cellW = 370, cellH = 320, margin = 16;
+        const c = document.createElement('canvas');
+        c.width = cellW * cols + margin * 2;
+        c.height = cellH * rows + margin * 2;
+        const ctx = c.getContext('2d')!;
+        ctx.fillStyle = '#ffffff'; // white frame around the green sheet
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.fillStyle = '#00FF00';
+        ctx.fillRect(margin, margin, cellW * cols, cellH * rows);
+        const colors = ['#e74c3c', '#3498db', '#f39c12', '#9b59b6', '#c0392b', '#e67e22', '#2c3e50', '#d35400',
+                        '#8e44ad', '#2980b9', '#b03a2e', '#ca6f1e', '#7f8c8d', '#a04000', '#cb4335', '#2471a3'];
+        for (let r = 0; r < rows; r++) for (let col = 0; col < cols; col++) {
+            ctx.fillStyle = colors[r * cols + col];
+            ctx.fillRect(margin + col * cellW + 15, margin + r * cellH + 15, cellW - 30, cellH - 30);
+        }
+        return c.toDataURL('image/png').split(',')[1];
+    });
+    await page.locator('input[type=file]').last().setInputFiles({
+        name: 'sheet.png', mimeType: 'image/png', buffer: Buffer.from(base64, 'base64'),
+    });
+
+    const sliceButton = page.getByRole('button', { name: /綠幕自動切割/ });
+    await expect(sliceButton).toBeVisible({ timeout: 60_000 });
+    await sliceButton.click();
+    await expect(page.getByText(/貼圖完成/)).toBeVisible({ timeout: 60_000 });
+
+    const cards = page.locator('main img');
+    await expect.poll(async () => cards.count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(16);
+
+    // No residual green: sample the first sticker and count green pixels
+    const greenPct = await page.evaluate(async () => {
+        const img = document.querySelector('main img') as HTMLImageElement;
+        const bmp = await createImageBitmap(img);
+        const c2 = document.createElement('canvas');
+        c2.width = bmp.width; c2.height = bmp.height;
+        const cx2 = c2.getContext('2d')!;
+        cx2.drawImage(bmp, 0, 0);
+        const d = cx2.getImageData(0, 0, bmp.width, bmp.height).data;
+        let green = 0, total = 0;
+        for (let i = 0; i < d.length; i += 16) {
+            total++;
+            if (d[i + 3] > 200 && d[i + 1] > 180 && d[i] < 120 && d[i + 2] < 120) green++;
+        }
+        return Math.round((green / total) * 100);
+    });
+    expect(greenPct).toBeLessThan(3);
+});
+
 test('main thread stays responsive while OpenCV initializes (no Page Unresponsive freeze)', async ({ page }) => {
     test.setTimeout(120_000);
 

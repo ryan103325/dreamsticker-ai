@@ -773,7 +773,7 @@ export const App = () => {
             reader.onload = async (event) => {
                 try {
                     const result = event.target?.result as string;
-                    const resized = await resizeImage(result, 4096);
+                    const resized = await resizeImage(result, 4096, 'png');
                     setRawSheetUrls([resized]);
                     setCurrentSheetIndex(0);
                     const defaults = generateDefaultConfigs(stickerQuantity);
