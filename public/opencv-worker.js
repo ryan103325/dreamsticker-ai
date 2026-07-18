@@ -150,26 +150,40 @@ const cellwiseRects = (cv, mask, rows, cols) => {
             const contours = new cv.MatVector();
             const hier = new cv.Mat();
             cv.findContours(cellMask, contours, hier, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-            const cellBoxes = [];
+            const entries = [];
             for (let k = 0; k < contours.size(); k++) {
                 const b = cv.boundingRect(contours.get(k));
                 if (b.width < 8 || b.height < 8) continue; // noise specks
-                cellBoxes.push(b);
+                entries.push({ k, b });
             }
-            contours.delete(); hier.delete(); cellMask.delete();
             // A neighboring sticker that slightly overflows its own cell
             // shows up here as a THIN strip clipped against this cell's
-            // border. Including it stretches the crop to the cell edge and
-            // the neighbor fragment appears inside the sticker. Real
-            // content (body, caption) is never both edge-hugging AND thin,
-            // so drop such strips — unless they are all this cell has.
+            // border. Real content (body, caption) is never both
+            // edge-hugging AND thin, so treat such strips as intruders —
+            // unless they are all this cell has.
             const isOverflowStrip = (b) =>
                 ((b.y <= 1 || b.y + b.height >= h - 1) && b.height < cellH * 0.15) ||
                 ((b.x <= 1 || b.x + b.width >= w - 1) && b.width < cellW * 0.15);
-            const content = cellBoxes.filter((b) => !isOverflowStrip(b));
-            const useBoxes = content.length > 0 ? content : cellBoxes;
+            const content = entries.filter((e) => !isOverflowStrip(e.b));
+            const strips = entries.filter((e) => isOverflowStrip(e.b));
+            const useBoxes = content.length > 0 ? content : entries;
+            // Excluding a strip from the crop BOX is not enough: on real
+            // sheets the intruder often overlaps the sticker's own caption
+            // vertically, so it still lands inside the crop. Scrub its
+            // pixels off the mask so they become transparent — the caller
+            // merges the mask into the alpha channel AFTER this runs.
+            if (content.length > 0 && strips.length > 0 && typeof cv.drawContours === 'function') {
+                for (const e of strips) {
+                    cv.drawContours(cellMask, contours, e.k, new cv.Scalar(0), -1);
+                }
+                const dstView = mask.roi(new cv.Rect(x, y, w, h));
+                cellMask.copyTo(dstView);
+                dstView.delete();
+            }
+            contours.delete(); hier.delete(); cellMask.delete();
             let bx1 = Infinity, by1 = Infinity, bx2 = -1, by2 = -1;
-            for (const b of useBoxes) {
+            for (const e of useBoxes) {
+                const b = e.b;
                 bx1 = Math.min(bx1, b.x); by1 = Math.min(by1, b.y);
                 bx2 = Math.max(bx2, b.x + b.width); by2 = Math.max(by2, b.y + b.height);
             }
@@ -343,17 +357,6 @@ const sliceSheet = async ({ imageBitmap, rows, cols, targetW, targetH, padding, 
     const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
     cv.morphologyEx(mask, mask, cv.MORPH_OPEN, kernel);
 
-    const rgbaPlanes = new cv.MatVector();
-    cv.split(src, rgbaPlanes);
-    const r = rgbaPlanes.get(0);
-    const g = rgbaPlanes.get(1);
-    const b = rgbaPlanes.get(2);
-    const resultPlanes = new cv.MatVector();
-    resultPlanes.push_back(r); resultPlanes.push_back(g); resultPlanes.push_back(b);
-    resultPlanes.push_back(mask);
-    cv.merge(resultPlanes, src);
-    r.delete(); g.delete(); b.delete(); rgbaPlanes.delete(); resultPlanes.delete();
-
     const totalH = src.rows;
     const totalW = src.cols;
     const cellW = totalW / cols;
@@ -377,6 +380,20 @@ const sliceSheet = async ({ imageBitmap, rows, cols, targetW, targetH, padding, 
         console.warn('[Slicer] Gap clustering did not resolve cleanly; slicing by the known grid instead.');
         finalRects = cellwiseRects(cv, mask, rows, cols);
     }
+
+    // Merge the mask into src's alpha channel only NOW: cellwiseRects may
+    // have scrubbed neighbor-overflow strips off the mask, and those pixels
+    // must end up transparent in the crops.
+    const rgbaPlanes = new cv.MatVector();
+    cv.split(src, rgbaPlanes);
+    const rP = rgbaPlanes.get(0);
+    const gP = rgbaPlanes.get(1);
+    const bP = rgbaPlanes.get(2);
+    const resultPlanes = new cv.MatVector();
+    resultPlanes.push_back(rP); resultPlanes.push_back(gP); resultPlanes.push_back(bP);
+    resultPlanes.push_back(mask);
+    cv.merge(resultPlanes, src);
+    rP.delete(); gP.delete(); bP.delete(); rgbaPlanes.delete(); resultPlanes.delete();
 
     const blobs = [];
     for (const tight of finalRects) {
