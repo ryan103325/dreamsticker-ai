@@ -230,7 +230,14 @@ export const blobToDataUrl = (blob: Blob): Promise<string> => {
     });
 };
 
-export const resizeImage = (dataUrl: string, maxWidth: number): Promise<string> => {
+/**
+ * Downscales an image to maxWidth. format='jpeg' (default) composites onto
+ * white and re-encodes lossily — right for photo uploads. Green-screen SHEET
+ * uploads must pass 'png': JPEG re-encoding smears compression noise into
+ * the chroma-key edges and hurts slicing quality (transparency still gets
+ * flattened onto white either way).
+ */
+export const resizeImage = (dataUrl: string, maxWidth: number, format: 'jpeg' | 'png' = 'jpeg'): Promise<string> => {
     return new Promise((resolve) => {
         const img = new Image();
         img.onload = () => {
@@ -245,7 +252,7 @@ export const resizeImage = (dataUrl: string, maxWidth: number): Promise<string> 
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, w, h);
             ctx.drawImage(img, 0, 0, w, h);
-            resolve(canvas.toDataURL('image/jpeg', 0.9));
+            resolve(format === 'png' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.9));
         };
         img.onerror = () => resolve(dataUrl);
         img.src = dataUrl;

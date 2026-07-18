@@ -169,6 +169,19 @@ const despillImageData = (imgData) => {
  * cluster (uniform-cell fallback) -> per-cell crop, soft alpha edge,
  * despill, resample into the target canvas.
  */
+// Builds the green-screen mask (HSV inRange) for an RGBA Mat.
+const greenMaskOf = (cv, srcRGBA) => {
+    const rgb = new cv.Mat();
+    cv.cvtColor(srcRGBA, rgb, cv.COLOR_RGBA2RGB);
+    cv.cvtColor(rgb, rgb, cv.COLOR_RGB2HSV);
+    const low = new cv.Mat(rgb.rows, rgb.cols, rgb.type(), [35, 40, 40, 0]);
+    const high = new cv.Mat(rgb.rows, rgb.cols, rgb.type(), [85, 255, 255, 255]);
+    const mask = new cv.Mat();
+    cv.inRange(rgb, low, high, mask);
+    low.delete(); high.delete(); rgb.delete();
+    return mask;
+};
+
 const sliceSheet = async ({ imageBitmap, rows, cols, targetW, targetH, padding, fit }) => {
     const cv = self.cv;
 
@@ -176,40 +189,75 @@ const sliceSheet = async ({ imageBitmap, rows, cols, targetW, targetH, padding, 
     const srcCtx = srcCanvas.getContext('2d');
     srcCtx.drawImage(imageBitmap, 0, 0);
     imageBitmap.close();
-    const srcImgData = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+    let srcImgData = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+    let src = cv.matFromImageData(srcImgData); // RGBA
 
-    const src = cv.matFromImageData(srcImgData); // RGBA
-    const cvt = new cv.Mat();
-    const mask = new cv.Mat();
-
-    cv.cvtColor(src, cvt, cv.COLOR_RGBA2RGB);
-
-    const p0 = cvt.ucharPtr(0, 0);
-    const bgR = p0[0], bgG = p0[1], bgB = p0[2];
-
-    const hsvPix = new cv.Mat();
-    const srcPix = new cv.Mat(1, 1, cv.CV_8UC3, new cv.Scalar(bgR, bgG, bgB));
-    cv.cvtColor(srcPix, hsvPix, cv.COLOR_RGB2HSV);
-    const h0 = hsvPix.data[0];
-    const s0 = hsvPix.data[1];
-    srcPix.delete(); hsvPix.delete();
-
-    const isGreenBG = (h0 >= 35 && h0 <= 85) && (s0 > 20);
+    // --- Robust background detection ------------------------------------
+    // A single corner pixel is NOT a reliable probe: real user sheets often
+    // carry a white or formerly-transparent margin (flattened to white on
+    // upload), which made the old corner-sample pick WHITE as background —
+    // green then counted as content and the whole sheet collapsed into one
+    // giant green blob. Instead, measure how much of the WHOLE image is
+    // green-screen-like; this app's sheets are green by design, so any
+    // meaningful fraction means green mode.
+    let mask = greenMaskOf(cv, src);
+    const greenFraction = cv.countNonZero(mask) / (src.rows * src.cols);
+    const isGreenBG = greenFraction > 0.15;
 
     if (isGreenBG) {
-        const hsv = new cv.Mat();
-        cv.cvtColor(src, hsv, cv.COLOR_RGBA2RGB);
-        cv.cvtColor(hsv, hsv, cv.COLOR_RGB2HSV);
-        const low = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [35, 40, 40, 0]);
-        const high = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [85, 255, 255, 255]);
-        cv.inRange(hsv, low, high, mask);
-        low.delete(); high.delete(); hsv.delete();
+        // Crop to the green area's bounding box: trims white/transparent
+        // margins around the sheet AND aligns the assumed grid to the real
+        // sheet edges. Re-extract via ImageData (never read .data off a roi
+        // view — see the stride note below).
+        // (cv.findNonZero is not exported in this opencv.js build — derive
+        // the bbox from the union of green-region contours instead.)
+        const gc = new cv.MatVector();
+        const gh = new cv.Mat();
+        cv.findContours(mask, gc, gh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+        let bx1 = Infinity, by1 = Infinity, bx2 = -1, by2 = -1;
+        for (let k = 0; k < gc.size(); k++) {
+            const r0 = cv.boundingRect(gc.get(k));
+            if (r0.width < 4 || r0.height < 4) continue;
+            bx1 = Math.min(bx1, r0.x); by1 = Math.min(by1, r0.y);
+            bx2 = Math.max(bx2, r0.x + r0.width); by2 = Math.max(by2, r0.y + r0.height);
+        }
+        gc.delete(); gh.delete();
+        const bbox = bx2 > bx1
+            ? { x: bx1, y: by1, width: bx2 - bx1, height: by2 - by1 }
+            : { x: 0, y: 0, width: src.cols, height: src.rows };
+        const needsCrop = bbox.width > 16 && bbox.height > 16 &&
+            (bbox.x > 0 || bbox.y > 0 || bbox.width < src.cols || bbox.height < src.rows);
+        if (needsCrop) {
+            srcImgData = srcCtx.getImageData(bbox.x, bbox.y, bbox.width, bbox.height);
+            src.delete(); mask.delete();
+            src = cv.matFromImageData(srcImgData);
+            mask = greenMaskOf(cv, src);
+        }
     } else {
+        // Not a green sheet: generic solid-color mode. Sample all four
+        // corners and use the color the MOST corners agree on (majority
+        // vote) instead of trusting a single pixel.
+        mask.delete();
+        const cvt = new cv.Mat();
+        cv.cvtColor(src, cvt, cv.COLOR_RGBA2RGB);
+        const cornerAt = (row, col) => { const p = cvt.ucharPtr(row, col); return [p[0], p[1], p[2]]; };
+        const corners = [
+            cornerAt(0, 0), cornerAt(0, cvt.cols - 1),
+            cornerAt(cvt.rows - 1, 0), cornerAt(cvt.rows - 1, cvt.cols - 1),
+        ];
         const tol = 30;
+        const close = (a, b) => Math.abs(a[0] - b[0]) <= tol && Math.abs(a[1] - b[1]) <= tol && Math.abs(a[2] - b[2]) <= tol;
+        let best = corners[0], bestVotes = -1;
+        for (const c1 of corners) {
+            const votes = corners.filter((c2) => close(c1, c2)).length;
+            if (votes > bestVotes) { bestVotes = votes; best = c1; }
+        }
+        const [bgR, bgG, bgB] = best;
         const low = new cv.Mat(cvt.rows, cvt.cols, cvt.type(), [Math.max(0, bgR - tol), Math.max(0, bgG - tol), Math.max(0, bgB - tol), 0]);
         const high = new cv.Mat(cvt.rows, cvt.cols, cvt.type(), [Math.min(255, bgR + tol), Math.min(255, bgG + tol), Math.min(255, bgB + tol), 255]);
+        mask = new cv.Mat();
         cv.inRange(cvt, low, high, mask);
-        low.delete(); high.delete();
+        low.delete(); high.delete(); cvt.delete();
     }
 
     cv.bitwise_not(mask, mask);
@@ -248,8 +296,13 @@ const sliceSheet = async ({ imageBitmap, rows, cols, targetW, targetH, padding, 
     const merged = mergeFragments(boxes, cellW, cellH);
     let finalRects = clusterToGrid(merged, rows, cols, cellW, cellH);
     if (!finalRects) {
+        // Fall back on the RAW boxes, not the merged ones: when merging has
+        // chained fragments across cells (the reason clustering bailed),
+        // feeding those giant unions to uniformAssign collapses everything
+        // into one center cell. Raw boxes let each fragment land in its own
+        // nearest cell instead.
         console.warn('[Slicer] Gap clustering did not resolve cleanly; using uniform-grid fallback.');
-        finalRects = uniformAssign(merged, rows, cols, totalW, totalH);
+        finalRects = uniformAssign(boxes, rows, cols, totalW, totalH);
     }
 
     const blobs = [];
@@ -313,7 +366,7 @@ const sliceSheet = async ({ imageBitmap, rows, cols, targetW, targetH, padding, 
         blobs.push(await cellCanvas.convertToBlob({ type: 'image/png' }));
     }
 
-    src.delete(); cvt.delete(); mask.delete(); kernel.delete();
+    src.delete(); mask.delete(); kernel.delete();
     return blobs;
 };
 
