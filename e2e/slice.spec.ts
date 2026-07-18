@@ -296,6 +296,103 @@ test('40-sticker (5x8) tightly-packed sheet slices into all 40 cells', async ({ 
     await expect.poll(async () => cards.count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(40);
 });
 
+test('greenish text survives keying and neighbor overflow is not cropped in', async ({ page }) => {
+    test.setTimeout(120_000);
+
+    // Two real user reports on the cell-grid fallback path:
+    // 1. Dark-green / teal lettering inside a sticker fell inside the broad
+    //    detection band and turned transparent — the matte must key only a
+    //    tight band around the MEASURED background color.
+    // 2. A sticker slightly overflowing its cell left a thin strip inside
+    //    the neighboring cell, and that strip got included in the
+    //    neighbor's crop.
+    await page.goto('/');
+    await page.getByPlaceholder(/API KEY/i).fill('test-key-1234567890');
+    await page.getByRole('button', { name: /開始創作/ }).click();
+    await page.getByRole('heading', { name: '上傳底圖' }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: '16', exact: true }).click();
+
+    const base64 = await page.evaluate(() => {
+        const cols = 4, rows = 4, cellW = 370, cellH = 320;
+        const c = document.createElement('canvas');
+        c.width = cellW * cols; c.height = cellH * rows;
+        const ctx = c.getContext('2d')!;
+        ctx.fillStyle = '#00FF00';
+        ctx.fillRect(0, 0, c.width, c.height);
+        // Full-width white bars per cell: rows fuse horizontally (forcing
+        // the cell-grid fallback), 60px green river between rows. Inner
+        // colors deliberately stay far from the key's hue band — content
+        // painted in (nearly) the key color itself is unresolvable.
+        const colors = ['#e74c3c', '#3498db', '#f39c12', '#9b59b6', '#c0392b', '#e67e22', '#2c3e50', '#d35400',
+                        '#8e44ad', '#2980b9', '#b03a2e', '#ca6f1e', '#7f8c8d', '#a04000', '#cb4335', '#2471a3'];
+        for (let r = 0; r < rows; r++) for (let col = 0; col < cols; col++) {
+            const x = col * cellW, y = r * cellH;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x, y + 30, cellW, cellH - 60);
+            ctx.fillStyle = colors[r * cols + col];
+            ctx.fillRect(x + 20, y + 50, cellW - 40, cellH - 100);
+        }
+        // Cell (0,0): dark-green and teal "lettering" blocks — both inside
+        // the broad green detection band, far from the pure #00FF00 key.
+        ctx.fillStyle = '#1e8e3e';
+        ctx.fillRect(40, 70, 80, 60);
+        ctx.fillStyle = '#00c896';
+        ctx.fillRect(150, 70, 80, 60);
+        // Cell (0,1): a tongue overflowing 14px down into cell (1,1).
+        ctx.fillStyle = '#112233';
+        ctx.fillRect(cellW + 135, cellH - 30, 100, 44);
+        return c.toDataURL('image/png').split(',')[1];
+    });
+    await page.locator('input[type=file]').last().setInputFiles({
+        name: 'sheet.png', mimeType: 'image/png', buffer: Buffer.from(base64, 'base64'),
+    });
+
+    const sliceButton = page.getByRole('button', { name: /綠幕自動切割/ });
+    await expect(sliceButton).toBeVisible({ timeout: 60_000 });
+    await sliceButton.click();
+    await expect(page.getByText(/貼圖完成/)).toBeVisible({ timeout: 60_000 });
+    const cards = page.locator('main img');
+    await expect.poll(async () => cards.count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(16);
+
+    const counts = await page.evaluate(async () => {
+        const near = (d: Uint8ClampedArray, i: number, rgb: number[], tol: number) =>
+            d[i + 3] > 100 &&
+            Math.abs(d[i] - rgb[0]) < tol && Math.abs(d[i + 1] - rgb[1]) < tol && Math.abs(d[i + 2] - rgb[2]) < tol;
+        const scan = async (img: HTMLImageElement) => {
+            const bmp = await createImageBitmap(img);
+            const cc = document.createElement('canvas');
+            cc.width = bmp.width; cc.height = bmp.height;
+            const cx = cc.getContext('2d')!;
+            cx.drawImage(bmp, 0, 0);
+            return { d: cx.getImageData(0, 0, bmp.width, bmp.height).data, total: bmp.width * bmp.height };
+        };
+        const imgs = document.querySelectorAll('main img');
+        const first = await scan(imgs[0] as HTMLImageElement);       // cell (0,0)
+        const below = await scan(imgs[5] as HTMLImageElement);       // cell (1,1)
+        let darkGreen = 0, teal = 0, tongue = 0;
+        for (let i = 0; i < first.d.length; i += 4) {
+            if (near(first.d, i, [30, 142, 62], 45)) darkGreen++;
+            if (near(first.d, i, [0, 200, 150], 45)) teal++;
+        }
+        for (let i = 0; i < below.d.length; i += 4) {
+            if (near(below.d, i, [17, 34, 51], 40)) tongue++;
+        }
+        return {
+            darkGreenPct: (darkGreen / first.total) * 100,
+            tealPct: (teal / first.total) * 100,
+            tonguePct: (tongue / below.total) * 100,
+        };
+    });
+
+    // The lettering blocks are each 80x60 in a 370x320 cell (~4% of it) —
+    // require a solid fraction to survive, not just antialiasing crumbs.
+    expect(counts.darkGreenPct).toBeGreaterThan(1);
+    expect(counts.tealPct).toBeGreaterThan(1);
+    // The neighbor's tongue must NOT appear in cell (1,1)'s crop.
+    expect(counts.tonguePct).toBeLessThan(0.3);
+});
+
 test('main thread stays responsive while OpenCV initializes (no Page Unresponsive freeze)', async ({ page }) => {
     test.setTimeout(120_000);
 
