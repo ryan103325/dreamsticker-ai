@@ -11,7 +11,7 @@
  *   must never be cached.
  */
 
-const CACHE = 'dreamsticker-v2';
+const CACHE = 'dreamsticker-v3';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './logo.png', './favicon.png'];
 
 self.addEventListener('install', (event) => {
@@ -42,6 +42,11 @@ self.addEventListener('fetch', (event) => {
     // never finishes loading — let the browser fetch it directly and rely on
     // normal HTTP caching instead.
     if (url.pathname.includes('/vendor/')) return;
+
+    // opencv-worker.js has a STABLE filename: cache-first here once pinned a
+    // user to an outdated slicing engine across deploys. Its URL now carries
+    // a per-build ?v= query, but bypass it entirely as belt-and-braces.
+    if (url.pathname.endsWith('/opencv-worker.js')) return;
 
     // App navigations: network-first, offline fallback to the cached shell.
     // cache:'no-cache' forces conditional revalidation past the HTTP cache —

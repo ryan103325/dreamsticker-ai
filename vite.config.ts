@@ -6,6 +6,12 @@ export default defineConfig(() => {
   return {
     // Base URL for GitHub Pages (repo name) - Changed to relative for safer local dev
     base: './',
+    // Per-build id, appended to the opencv-worker URL: the worker file has a
+    // stable name, and the service worker's cache-first once pinned users to
+    // an outdated slicing engine across deploys.
+    define: {
+      __BUILD_ID__: JSON.stringify(Date.now().toString(36)),
+    },
     server: {
       port: 3000,
       host: '0.0.0.0',

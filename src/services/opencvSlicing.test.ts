@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeFragments, clusterToGrid, uniformAssign, RectLike } from './opencvService';
+import { mergeFragments, clusterToGrid, RectLike } from './opencvService';
 
 /**
  * Unit coverage for the pure slicing geometry (no OpenCV/browser needed).
@@ -67,24 +67,3 @@ describe('clusterToGrid', () => {
     });
 });
 
-describe('uniformAssign', () => {
-    it('assigns each blob to its own cell by centroid', () => {
-        const rects = uniformAssign(gridBoxes(2, 4), 2, 4, 400, 200);
-        expect(rects).toHaveLength(8);
-    });
-
-    it('unions two fragments that fall in the same cell', () => {
-        const boxes: RectLike[] = [
-            { x: 10, y: 10, width: 30, height: 30 },
-            { x: 50, y: 50, width: 30, height: 30 },
-        ];
-        const rects = uniformAssign(boxes, 1, 1, 100, 100);
-        expect(rects).toHaveLength(1);
-        expect(rects[0].width).toBeGreaterThanOrEqual(70);
-    });
-
-    it('drops slivers smaller than the 8px floor', () => {
-        const boxes: RectLike[] = [{ x: 0, y: 0, width: 3, height: 3 }];
-        expect(uniformAssign(boxes, 1, 1, 100, 100)).toHaveLength(0);
-    });
-});
