@@ -150,14 +150,29 @@ const cellwiseRects = (cv, mask, rows, cols) => {
             const contours = new cv.MatVector();
             const hier = new cv.Mat();
             cv.findContours(cellMask, contours, hier, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-            let bx1 = Infinity, by1 = Infinity, bx2 = -1, by2 = -1;
+            const cellBoxes = [];
             for (let k = 0; k < contours.size(); k++) {
                 const b = cv.boundingRect(contours.get(k));
                 if (b.width < 8 || b.height < 8) continue; // noise specks
+                cellBoxes.push(b);
+            }
+            contours.delete(); hier.delete(); cellMask.delete();
+            // A neighboring sticker that slightly overflows its own cell
+            // shows up here as a THIN strip clipped against this cell's
+            // border. Including it stretches the crop to the cell edge and
+            // the neighbor fragment appears inside the sticker. Real
+            // content (body, caption) is never both edge-hugging AND thin,
+            // so drop such strips — unless they are all this cell has.
+            const isOverflowStrip = (b) =>
+                ((b.y <= 1 || b.y + b.height >= h - 1) && b.height < cellH * 0.15) ||
+                ((b.x <= 1 || b.x + b.width >= w - 1) && b.width < cellW * 0.15);
+            const content = cellBoxes.filter((b) => !isOverflowStrip(b));
+            const useBoxes = content.length > 0 ? content : cellBoxes;
+            let bx1 = Infinity, by1 = Infinity, bx2 = -1, by2 = -1;
+            for (const b of useBoxes) {
                 bx1 = Math.min(bx1, b.x); by1 = Math.min(by1, b.y);
                 bx2 = Math.max(bx2, b.x + b.width); by2 = Math.max(by2, b.y + b.height);
             }
-            contours.delete(); hier.delete(); cellMask.delete();
             if (bx2 > bx1 && bx2 - bx1 > 8 && by2 - by1 > 8) {
                 out.push({ x: x + bx1, y: y + by1, width: bx2 - bx1, height: by2 - by1 });
             }
@@ -184,7 +199,11 @@ const despillImageData = (imgData) => {
  * cluster (uniform-cell fallback) -> per-cell crop, soft alpha edge,
  * despill, resample into the target canvas.
  */
-// Builds the green-screen mask (HSV inRange) for an RGBA Mat.
+// Builds the BROAD green-screen mask (HSV inRange) for an RGBA Mat. The
+// wide band (hue 70°-170°, any moderately saturated green through teal) is
+// deliberately permissive so DETECTION works on any green-screen shade —
+// but it is far too greedy to use for the actual matte: dark-green or teal
+// TEXT inside a sticker falls in this band and would turn transparent.
 const greenMaskOf = (cv, srcRGBA) => {
     const rgb = new cv.Mat();
     cv.cvtColor(srcRGBA, rgb, cv.COLOR_RGBA2RGB);
@@ -195,6 +214,46 @@ const greenMaskOf = (cv, srcRGBA) => {
     cv.inRange(rgb, low, high, mask);
     low.delete(); high.delete(); rgb.delete();
     return mask;
+};
+
+// Builds the TIGHT matte mask: measures the actual chroma-key color as the
+// MODE (largest histogram bin) of the broad mask's H/S/V values and keys
+// only a narrow band around it. The mode, not the mean: greenish sticker
+// CONTENT (dark-green or teal lettering, green props) also lands in the
+// broad mask, and enough of it drags a mean far enough to swallow that
+// very content — while the single most common color is always the flat,
+// uniform key itself. Returns null when the broad mask is empty (caller
+// keeps the broad mask).
+const adaptiveGreenMask = (cv, srcRGBA, broadMask) => {
+    const hsv = new cv.Mat();
+    cv.cvtColor(srcRGBA, hsv, cv.COLOR_RGBA2RGB);
+    cv.cvtColor(hsv, hsv, cv.COLOR_RGB2HSV);
+    // Coarse histogram over the mask, in JS (cv.mean's masked overload is
+    // not reliably exported in this build; findNonZero isn't either). Both
+    // mats are freshly allocated -> contiguous, so .data is safe to read.
+    // Bins: H/4 (8° wide), S/16, V/16.
+    const hd = hsv.data, md = broadMask.data;
+    const bins = new Map();
+    for (let i = 0; i < md.length; i += 4) { // every 4th pixel is plenty
+        if (!md[i]) continue;
+        const j = i * 3;
+        const key = ((hd[j] >> 2) << 8) | ((hd[j + 1] >> 4) << 4) | (hd[j + 2] >> 4);
+        let b = bins.get(key);
+        if (!b) { b = { n: 0, h: 0, s: 0, v: 0 }; bins.set(key, b); }
+        b.n++; b.h += hd[j]; b.s += hd[j + 1]; b.v += hd[j + 2];
+    }
+    let top = null;
+    for (const b of bins.values()) if (!top || b.n > top.n) top = b;
+    if (!top) { hsv.delete(); return null; }
+    const h = top.h / top.n, s = top.s / top.n, v = top.v / top.n;
+    const low = new cv.Mat(hsv.rows, hsv.cols, hsv.type(),
+        [Math.max(30, h - 12), Math.max(60, s - 90), Math.max(60, v - 90), 0]);
+    const high = new cv.Mat(hsv.rows, hsv.cols, hsv.type(),
+        [Math.min(90, h + 12), 255, 255, 255]);
+    const out = new cv.Mat();
+    cv.inRange(hsv, low, high, out);
+    low.delete(); high.delete(); hsv.delete();
+    return out;
 };
 
 const sliceSheet = async ({ imageBitmap, rows, cols, targetW, targetH, padding, fit }) => {
@@ -248,6 +307,10 @@ const sliceSheet = async ({ imageBitmap, rows, cols, targetW, targetH, padding, 
             src = cv.matFromImageData(srcImgData);
             mask = greenMaskOf(cv, src);
         }
+        // Detection done — switch to the tight, measured-key matte so
+        // greenish text/props inside stickers survive the keying.
+        const tight = adaptiveGreenMask(cv, src, mask);
+        if (tight) { mask.delete(); mask = tight; }
     } else {
         // Not a green sheet: generic solid-color mode. Sample all four
         // corners and use the color the MOST corners agree on (majority
