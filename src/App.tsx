@@ -28,13 +28,25 @@ import { MagicEditor } from './components/MagicEditor';
 import { HelpModal } from './components/HelpModal';
 import { UploadIcon, MagicWandIcon, StickerIcon, DownloadIcon, RefreshIcon, EditIcon, CloseIcon, HelpIcon, StarIcon, CopyIcon, ExternalLinkIcon, FolderOpenIcon, DiceIcon, TrashIcon, ArrowLeftIcon } from './components/Icons';
 import { LandingPage } from './components/LandingPage';
+import { WorksGallery } from './components/WorksGallery';
+import { loadApiKey, clearApiKey } from './services/storageUtils';
 import { setApiKey } from './services/geminiService';
 import { loadGoogleProfile, clearGoogleProfile, GoogleProfile } from './services/googleAuth';
 import { useToast } from './components/Toast';
-import { saveWork, loadWork, clearWork, SavedWork } from './services/persistence';
+import { saveWork, listWorks, deleteWork, clearWork, newWorkId, SavedWork } from './services/persistence';
 
 // Add new step for Smart Crop Preview
 const SHEET_EDITOR_STEP = AppStep.SHEET_EDITOR;
+
+// Composition directives for a user-pinned photo-to-IP subject type. Injected
+// as free text into the style prompt (see [Character Composition Requirement]),
+// so besides naming the subject they tell the model to IGNORE the rest — which
+// is the whole point when a photo has, say, both a person and a pet.
+const SUBJECT_COMPOSITION: Record<'PERSON' | 'ANIMAL' | 'OTHER', string> = {
+    PERSON: 'Person (人物) — the IP is the HUMAN subject only. If the photo also contains animals or other objects, IGNORE them and design a human character.',
+    ANIMAL: 'Animal (動物) — the IP is the ANIMAL subject only. If the photo also contains a person or other objects, IGNORE them and design an animal character (anthropomorphised is fine, but it must stay an animal).',
+    OTHER: 'Other subject (其他) — the main subject is NOT a typical person or animal (e.g. an object, food, plant, or mascot). Design the IP faithfully around THAT subject.',
+};
 
 // Predefined Art Styles for Quick Selection
 const ART_STYLES = [
@@ -444,6 +456,9 @@ export const App = () => {
     // Group Character States
     const [charCount, setCharCount] = useState<number>(1);
     const [charComposition, setCharComposition] = useState("Animal (動物)"); // New State
+    // Photo-to-IP subject type. 'AUTO' keeps the existing image auto-detect;
+    // a pinned type overrides it and tells the model which subject is the IP.
+    const [subjectType, setSubjectType] = useState<'AUTO' | 'PERSON' | 'ANIMAL' | 'OTHER'>('AUTO');
     const [groupChars, setGroupChars] = useState<CharacterInput[]>([
         { id: '1', description: '' },
         { id: '2', description: '' }
@@ -605,8 +620,22 @@ export const App = () => {
         setGoogleProfile(null);
     };
 
-    // Security update: No auto-loading of keys.
-    // useEffect(() => { ... }, []);
+    // Change/forget the stored API key: wipe it and return to the key gate.
+    const handleChangeKey = () => {
+        clearApiKey();
+        setHasKey(false);
+    };
+
+    // Auto-skip the key gate when the user chose "remember key": a stored key
+    // means they already opted in, so send them straight into the app instead
+    // of re-showing the API-key screen every visit. (Runs once on mount.)
+    useEffect(() => {
+        const stored = loadApiKey();
+        if (stored && stored.trim().length > 10) {
+            setKeyAndStart(stored.trim());
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // 2. OpenCV: lazily fetch the ~13MB wasm module only when the user
     // actually reaches the sheet-slicing step
@@ -618,18 +647,30 @@ export const App = () => {
 
     // 3. Work persistence: offer to restore the last finished set, and keep
     // the current one saved so a refresh doesn't destroy the output.
-    const [savedWork, setSavedWork] = useState<SavedWork | null>(null);
+    // Local works gallery (IndexedDB). `works` is the newest-first list;
+    // `galleryOpen` toggles the gallery modal.
+    const [works, setWorks] = useState<SavedWork[]>([]);
+    const [galleryOpen, setGalleryOpen] = useState(false);
+    // Stable id for the work currently being produced, so the repeated
+    // auto-saves during STICKER_PROCESSING update ONE entry instead of
+    // creating duplicates. Reset when leaving processing; set on restore.
+    const workIdRef = useRef<string | null>(null);
+
+    const refreshWorks = () => { listWorks().then(setWorks); };
+    useEffect(() => { refreshWorks(); }, []);
+
+    // A restored/continued work keeps its id; a fresh set starts a new one.
     useEffect(() => {
-        loadWork().then(w => {
-            if (w && w.finalStickers.some(s => s.status === 'SUCCESS')) setSavedWork(w);
-        });
-    }, []);
+        if (appStep !== AppStep.STICKER_PROCESSING) workIdRef.current = null;
+    }, [appStep]);
 
     useEffect(() => {
         if (appStep === AppStep.STICKER_PROCESSING) {
             const done = finalStickers.filter(s => s.status === 'SUCCESS');
             if (done.length > 0 && !finalStickers.some(s => s.status === 'GENERATING' || s.status === 'PENDING')) {
+                if (!workIdRef.current) workIdRef.current = newWorkId();
                 saveWork({
+                    id: workIdRef.current,
                     savedAt: Date.now(),
                     stickerType,
                     platformId,
@@ -637,27 +678,30 @@ export const App = () => {
                     stickerPackageInfo,
                     zipFileName,
                     mainStickerId,
-                });
+                }).then(refreshWorks);
             }
         }
     }, [appStep, finalStickers, stickerPackageInfo, zipFileName, mainStickerId, stickerType, platformId]);
 
-    const handleRestoreWork = () => {
-        if (!savedWork) return;
+    const handleRestoreWork = (work: SavedWork) => {
         // Old saves carry only stickerType; map it to the matching LINE platform
-        setPlatformId(getPlatform(savedWork.platformId
-            ?? (savedWork.stickerType === 'EMOJI' ? 'LINE_EMOJI' : 'LINE_STICKER')).id);
-        setFinalStickers(savedWork.finalStickers);
-        setStickerPackageInfo(savedWork.stickerPackageInfo);
-        setZipFileName(savedWork.zipFileName || 'MyStickers');
-        setMainStickerId(savedWork.mainStickerId ?? savedWork.finalStickers[0]?.id ?? null);
-        setSavedWork(null);
+        setPlatformId(getPlatform(work.platformId
+            ?? (work.stickerType === 'EMOJI' ? 'LINE_EMOJI' : 'LINE_STICKER')).id);
+        setFinalStickers(work.finalStickers);
+        setStickerPackageInfo(work.stickerPackageInfo);
+        setZipFileName(work.zipFileName || 'MyStickers');
+        setMainStickerId(work.mainStickerId ?? work.finalStickers[0]?.id ?? null);
+        setGalleryOpen(false);
+        workIdRef.current = work.id; // continue this entry, don't duplicate it
         setAppStep(AppStep.STICKER_PROCESSING);
     };
 
-    const handleDiscardWork = () => {
-        setSavedWork(null);
-        clearWork();
+    const handleDeleteWork = (id: string) => {
+        deleteWork(id).then(refreshWorks);
+    };
+
+    const handleClearAllWorks = () => {
+        clearWork().then(refreshWorks);
     };
 
 
@@ -919,7 +963,14 @@ export const App = () => {
 
         try {
             // Auto-detect Logic
-            if (inputMode === 'PHOTO') {
+            if (inputMode === 'PHOTO' && subjectType !== 'AUTO') {
+                // User pinned the subject type — skip auto-detect and tell the
+                // model exactly what to focus on. This resolves the "loses the
+                // target on a person + animal photo" problem: the directive
+                // says which subject is the IP and to ignore the rest.
+                activeComposition = SUBJECT_COMPOSITION[subjectType];
+                setCharComposition(activeComposition);
+            } else if (inputMode === 'PHOTO') {
                 setLoadingMsg(t('loadingAnalyzingImage'));
                 try {
                     let detectedType = "";
@@ -1368,7 +1419,7 @@ export const App = () => {
                         </h1>
                     </div>
                 </div>
-                <div className="flex gap-2 items-center">
+                <div className="flex gap-1 sm:gap-2 items-center">
                     {googleProfile && (
                         <div className={`hidden sm:flex items-center gap-2 pl-1 pr-2 py-1 rounded-full ${theme === 'dark' ? 'bg-white/10 border border-white/10' : 'bg-slate-100'}`}>
                             <img src={googleProfile.picture} alt={googleProfile.name} referrerPolicy="no-referrer" className="w-7 h-7 rounded-full" title={`${t('signedInAs')}: ${googleProfile.email}`} />
@@ -1393,11 +1444,39 @@ export const App = () => {
                     >
                         <span>🌐</span> {sysLang === 'zh' ? 'EN' : '中'}
                     </button>
+                    <button
+                        onClick={() => setGalleryOpen(true)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20 border border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'}`}
+                        title={t('galleryTitle')}
+                    >
+                        <span>🖼️</span>
+                        <span className="hidden sm:inline">{t('galleryTitle')}</span>
+                        {works.length > 0 && <span className="ml-0.5 min-w-4 px-1 rounded-full bg-indigo-500 text-white text-[10px] leading-4 text-center">{works.length}</span>}
+                    </button>
+                    <button
+                        onClick={handleChangeKey}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all hidden sm:flex items-center gap-1 ${theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20 border border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'}`}
+                        title={t('changeKey')}
+                    >
+                        🔑
+                    </button>
                     <button onClick={() => setHelpOpen(true)} className={`p-2 rounded-full transition-colors ${theme === 'dark' ? 'text-indigo-300 hover:bg-white/10' : 'hover:bg-indigo-50 text-indigo-600'}`}>
                         <HelpIcon />
                     </button>
                 </div>
             </nav>
+
+            {galleryOpen && (
+                <WorksGallery
+                    works={works}
+                    isDark={theme === 'dark'}
+                    t={t}
+                    onRestore={handleRestoreWork}
+                    onDelete={handleDeleteWork}
+                    onClearAll={handleClearAllWorks}
+                    onClose={() => setGalleryOpen(false)}
+                />
+            )}
 
             <Stepper
                 current={appStep === AppStep.UPLOAD || appStep === AppStep.CANDIDATE_SELECTION ? 0
@@ -1440,20 +1519,20 @@ export const App = () => {
                         {/* ... (Previous code remains the same) ... */}
                         {!inputMode && (
                             <>
-                                {savedWork && (
+                                {works.length > 0 && (
                                     <div className={`max-w-2xl mx-auto rounded-2xl border-2 p-4 flex flex-wrap items-center gap-4 animate-fade-in ${theme === 'dark' ? 'bg-white/10 border-indigo-400/40' : 'bg-indigo-50 border-indigo-200'}`}>
                                         <div className="flex -space-x-3">
-                                            {savedWork.finalStickers.slice(0, 4).map(s => (
+                                            {works[0].finalStickers.slice(0, 4).map(s => (
                                                 <img key={s.id} src={s.url} alt="" className="keep-light w-12 h-12 rounded-xl bg-white border-2 border-white shadow object-contain" />
                                             ))}
                                         </div>
                                         <div className="flex-1 min-w-[140px]">
-                                            <p className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{t('resumeWorkTitle')}</p>
-                                            <p className={`text-xs ${theme === 'dark' ? 'text-indigo-200' : 'text-slate-500'}`}>{savedWork.finalStickers.length} {t('unitSheet')} · {new Date(savedWork.savedAt).toLocaleString()}</p>
+                                            <p className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{t('galleryTitle')}</p>
+                                            <p className={`text-xs ${theme === 'dark' ? 'text-indigo-200' : 'text-slate-500'}`}>{works.length} {t('worksCountUnit')} · {t('galleryLatest')} {new Date(works[0].savedAt).toLocaleDateString()}</p>
                                         </div>
                                         <div className="flex gap-2">
-                                            <button onClick={handleRestoreWork} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow transition-colors">{t('resumeWork')}</button>
-                                            <button onClick={handleDiscardWork} className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors ${theme === 'dark' ? 'text-white/50 hover:text-white hover:bg-white/10' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}>{t('discardWork')}</button>
+                                            <button onClick={() => handleRestoreWork(works[0])} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow transition-colors">{t('resumeWork')}</button>
+                                            <button onClick={() => setGalleryOpen(true)} className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors ${theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-white text-indigo-600 hover:bg-indigo-100 shadow-sm'}`}>{t('openGallery')}</button>
                                         </div>
                                     </div>
                                 )}
@@ -1626,7 +1705,27 @@ export const App = () => {
                                                 </div>
                                             </div>
 
-
+                                            {/* Subject type: pin what the IP should be so the AI
+                                                stays focused (esp. person + animal photos). */}
+                                            <div>
+                                                <div className="flex items-center justify-between flex-wrap gap-2">
+                                                    <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                                        <span>🎯</span> {t('subjectTypeLabel')}
+                                                    </label>
+                                                    <div className="flex flex-wrap bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                                                        {([['AUTO', 'subjectAuto'], ['PERSON', 'subjectPerson'], ['ANIMAL', 'subjectAnimal'], ['OTHER', 'subjectOther']] as const).map(([val, key]) => (
+                                                            <button
+                                                                key={val}
+                                                                onClick={() => setSubjectType(val)}
+                                                                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${subjectType === val ? 'bg-indigo-500 text-white shadow-md' : 'text-slate-400 hover:text-indigo-500'}`}
+                                                            >
+                                                                {t(key)}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <p className="text-[10px] text-slate-400 mt-1.5">{t('subjectTypeHint')}</p>
+                                            </div>
                                         </div>
                                     )}
 
