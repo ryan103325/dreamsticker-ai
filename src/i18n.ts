@@ -55,6 +55,7 @@ export const translations = {
 
         // Platforms
         platformLabel: "目標平台",
+        stickerCountUnit: "張",
         platform_LINE_STICKER: "LINE 貼圖",
         platform_LINE_EMOJI: "LINE 表情貼",
         platform_TELEGRAM: "Telegram",
@@ -425,6 +426,7 @@ export const translations = {
 
         // Platforms
         platformLabel: "Target Platform",
+        stickerCountUnit: " pcs",
         platform_LINE_STICKER: "LINE Stickers",
         platform_LINE_EMOJI: "LINE Emoji",
         platform_TELEGRAM: "Telegram",

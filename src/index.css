@@ -144,3 +144,14 @@
   &.hover\:text-indigo-600:hover, &.hover\:text-indigo-700:hover, &.hover\:text-indigo-800:hover { color: var(--color-indigo-200); }
   &.hover\:text-pink-600:hover, &.hover\:text-pink-700:hover { color: #fbcfe8; }
 }
+
+/* ------------------------------------------------------------------------
+   Native <select> dropdowns.
+   The dark-mode sheet above remaps text-slate-700 -> light, but a native
+   <option> popup renders on the OS's white system menu, so light option
+   text became nearly invisible in dark mode (reported: 種類 dropdown).
+   Force the control to a stable light color-scheme and pin option colors
+   so the menu is always dark-on-white, in either theme.
+   ------------------------------------------------------------------------ */
+select { color-scheme: light; }
+select option { background-color: #ffffff; color: #1e293b; }

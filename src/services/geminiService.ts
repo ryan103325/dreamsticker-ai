@@ -841,12 +841,17 @@ export const generateStickerSheet = async (characterUrl: string, configs: Sticke
         - ** COLORS **: Use the EXACT same color palette as the reference image.
        - ** FEATURES **: Keep facial features, hair style / color, and accessories consistent.
        - ** DO NOT ** simplify into a generic "stick figure" or "black and white icon" unless the reference is that style.
-    2. ** SIZE OPTIMIZATION **: These are small emojis(${platform.cell.w}px).
+    2. ** CHIBI / BIG-HEAD DOLL PROPORTIONS(CRITICAL FOR EMOJI) **: Emoji are tiny, so the FACE must dominate.
+       - Draw the character as a ** big-head chibi **: an oversized head (roughly 60-70% of the whole figure) with the FACE and EXPRESSION filling most of the frame.
+       - ** SHRINK OR DROP THE BODY **: if the facial expression alone already conveys the emotion/idea, draw ** head only ** (no body). Only include a body when body language is essential to read the meaning, and then keep it ** as small as possible **.
+       - Prefer placing gestures ** around the face ** (e.g. a hand near the cheek, tears by the eyes, a raised paw beside the head, floating symbols) instead of a full body pose.
+       - Goal: maximum readability of the emotion at ${platform.cell.w}px.
+    3. ** SIZE OPTIMIZATION **: These are small emojis(${platform.cell.w}px).
        - Keep lines ** Bold and Clear **.
        - Avoid microscopic details that vanish at small sizes.
        - But ** KEEP THE VIBE ** of the original character.
-    3. ** NO WHITE OUTLINE **: Do NOT add a white border.The character should be ** FULL BLEED ** (fill the cell).
-4. ** CONNECTABLE **: If possible, design element so they look good when placed next to each other.
+    4. ** NO WHITE OUTLINE **: Do NOT add a white border.The character should be ** FULL BLEED ** (fill the cell) — the big head should reach close to the edges.
+5. ** CONNECTABLE **: If possible, design element so they look good when placed next to each other.
 
     ** COLOR SAFETY:**
     - NO Green(#00FF00) inside the artwork.
@@ -973,7 +978,7 @@ export const generateSingleSticker = async (
         : `**TEXT:** Do NOT render any text.`;
 
     const outlineRule = platform.fit === 'COVER'
-        ? `**STYLE:** Messaging-app emoji (small ${platform.cell.w}px target). Bold clear lines, no white sticker border, character fills the frame (full bleed) while keeping a thin green margin on all sides.`
+        ? `**STYLE:** Messaging-app emoji (small ${platform.cell.w}px target). Draw a BIG-HEAD CHIBI: oversized head (~60-70% of the figure) with the face/expression dominating the frame; shrink or DROP the body entirely when the expression alone conveys the meaning, adding only a minimal body or face-adjacent gesture (hand by cheek, tears, raised paw) when body language is essential. Bold clear lines, no white sticker border, character fills the frame (full bleed) while keeping a thin green margin on all sides.`
         : platform.outline === 'thick-white'
             ? `**STYLE:** Messaging-app sticker. Add a thick (15px) solid WHITE sticker outline around the character and text.`
             : platform.outline === 'thin-white'
