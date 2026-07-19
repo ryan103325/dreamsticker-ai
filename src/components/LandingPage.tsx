@@ -5,7 +5,6 @@ import { getOpenAIApiKey, saveOpenAIApiKey, clearOpenAIApiKey } from '../service
 import { getHFToken, saveHFToken, clearHFToken } from '../services/hfImageService';
 import { isGoogleLoginEnabled, renderGoogleButton, loadGoogleProfile, GoogleProfile } from '../services/googleAuth';
 import { MagicWandIcon } from './Icons';
-import { ScrambleText } from './ScrambleText';
 
 import { ApiKeyModal } from './ApiKeyModal';
 import { useToast } from './Toast';
@@ -119,7 +118,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
                         <img src="./logo.png" alt="DreamSticker AI" className="w-full h-full object-cover" />
                     </div>
                     <h1 className="reveal reveal-2 text-5xl font-black mb-3 tracking-tighter leading-none">
-                        <ScrambleText text="DreamSticker" className="animate-sheen bg-gradient-to-r from-white via-zinc-400 to-white bg-clip-text text-transparent" />
+                        <span className="text-white">DreamSticker</span>
                         <span className="text-[#F96A47]"> AI</span>
                     </h1>
                     <p className="reveal reveal-3 text-zinc-400 text-sm">{t('landingTitle')}</p>

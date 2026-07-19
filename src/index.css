@@ -57,18 +57,7 @@
   66% { transform: translate(-20px, 20px) scale(0.9); }
 }
 
-/* Kinetic wordmark sheen: a slow light sweep across gradient text. */
-@keyframes sheen {
-  0% { background-position: 200% center; }
-  100% { background-position: -200% center; }
-}
-
-.animate-sheen {
-  background-size: 200% auto;
-  animation: sheen 6s linear infinite;
-}
-
-/* Staggered entrance for hero elements. */
+/* Staggered entrance for hero elements (calm one-time fade-up). */
 .reveal { opacity: 0; animation: fade-in-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 .reveal-1 { animation-delay: 0.05s; }
 .reveal-2 { animation-delay: 0.15s; }
