@@ -125,74 +125,127 @@ const clusterToGrid = (boxes, rows, cols, cellW, cellH) => {
 };
 
 /**
- * Cell-driven fallback slicing: when contour clustering cannot resolve the
- * grid — typically a tightly-packed sheet where neighboring stickers'
- * white outlines physically touch and fuse into one connected component —
- * slice by the KNOWN grid instead. For each cell, find the bounding box of
- * mask content strictly inside that cell; cross-cell connections become
- * irrelevant, and every occupied cell yields exactly one sticker.
+ * Ownership-based fallback slicing, used when gap clustering can't resolve
+ * the grid. Two failure modes must BOTH be handled, and naive per-cell
+ * clamping (the previous approach) mishandled the first:
+ *
+ *  1. A sticker whose white outline OVERFLOWS its cell (very common — the
+ *     generator's stickers routinely bleed a few percent past the grid
+ *     line). Clamping the crop to the cell boundary sliced that outline
+ *     off flat. Fix: assign each whole-sheet contour to the cell holding
+ *     its CENTROID and keep its FULL bounding box, so the overflow travels
+ *     with its owner.
+ *  2. Neighbors whose outlines physically TOUCH and fuse into one contour
+ *     spanning multiple cells. A centroid can't split those, so any contour
+ *     larger than ~1.4 cells falls back to per-cell content boxes.
+ *
+ * Returns { rects, labels } where labels is a CV_8U map painting each
+ * sticker's pixels with its 1-based rect id; the caller ANDs (labels == id)
+ * into each crop's alpha so a bbox that overlaps a neighbor never drags the
+ * neighbor's pixels in.
  */
-const cellwiseRects = (cv, mask, rows, cols) => {
+const ownershipRects = (cv, mask, rows, cols) => {
     const totalW = mask.cols, totalH = mask.rows;
     const cellW = totalW / cols, cellH = totalH / rows;
-    const out = [];
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-            const x = Math.round(c * cellW), y = Math.round(r * cellH);
-            const w = Math.min(totalW, Math.round((c + 1) * cellW)) - x;
-            const h = Math.min(totalH, Math.round((r + 1) * cellH)) - y;
-            // copyTo -> contiguous cell mask (findContours-safe; never read
-            // pixel data straight off a roi() view)
-            const roiView = mask.roi(new cv.Rect(x, y, w, h));
-            const cellMask = new cv.Mat();
-            roiView.copyTo(cellMask);
-            roiView.delete();
-            const contours = new cv.MatVector();
-            const hier = new cv.Mat();
-            cv.findContours(cellMask, contours, hier, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-            const entries = [];
-            for (let k = 0; k < contours.size(); k++) {
-                const b = cv.boundingRect(contours.get(k));
-                if (b.width < 8 || b.height < 8) continue; // noise specks
-                entries.push({ k, b });
-            }
-            // A neighboring sticker that slightly overflows its own cell
-            // shows up here as a THIN strip clipped against this cell's
-            // border. Real content (body, caption) is never both
-            // edge-hugging AND thin, so treat such strips as intruders —
-            // unless they are all this cell has.
-            const isOverflowStrip = (b) =>
-                ((b.y <= 1 || b.y + b.height >= h - 1) && b.height < cellH * 0.15) ||
-                ((b.x <= 1 || b.x + b.width >= w - 1) && b.width < cellW * 0.15);
-            const content = entries.filter((e) => !isOverflowStrip(e.b));
-            const strips = entries.filter((e) => isOverflowStrip(e.b));
-            const useBoxes = content.length > 0 ? content : entries;
-            // Excluding a strip from the crop BOX is not enough: on real
-            // sheets the intruder often overlaps the sticker's own caption
-            // vertically, so it still lands inside the crop. Scrub its
-            // pixels off the mask so they become transparent — the caller
-            // merges the mask into the alpha channel AFTER this runs.
-            if (content.length > 0 && strips.length > 0 && typeof cv.drawContours === 'function') {
-                for (const e of strips) {
-                    cv.drawContours(cellMask, contours, e.k, new cv.Scalar(0), -1);
-                }
-                const dstView = mask.roi(new cv.Rect(x, y, w, h));
-                cellMask.copyTo(dstView);
-                dstView.delete();
-            }
-            contours.delete(); hier.delete(); cellMask.delete();
-            let bx1 = Infinity, by1 = Infinity, bx2 = -1, by2 = -1;
-            for (const e of useBoxes) {
-                const b = e.b;
-                bx1 = Math.min(bx1, b.x); by1 = Math.min(by1, b.y);
-                bx2 = Math.max(bx2, b.x + b.width); by2 = Math.max(by2, b.y + b.height);
-            }
-            if (bx2 > bx1 && bx2 - bx1 > 8 && by2 - by1 > 8) {
-                out.push({ x: x + bx1, y: y + by1, width: bx2 - bx1, height: by2 - by1 });
-            }
+    const hasDraw = typeof cv.drawContours === 'function';
+
+    const contours = new cv.MatVector();
+    const hier = new cv.Mat();
+    cv.findContours(mask, contours, hier, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+    const singles = [];       // { k, b } — one sticker, possibly overflowing
+    const fusedCells = new Set(); // "r,c" cells under an oversized (fused) contour
+    for (let k = 0; k < contours.size(); k++) {
+        const b = cv.boundingRect(contours.get(k));
+        if (b.width < 8 || b.height < 8) continue; // noise specks
+        if (b.width > cellW * 1.4 || b.height > cellH * 1.4) {
+            const c0 = Math.max(0, Math.floor(b.x / cellW));
+            const c1 = Math.min(cols - 1, Math.floor((b.x + b.width - 1) / cellW));
+            const r0 = Math.max(0, Math.floor(b.y / cellH));
+            const r1 = Math.min(rows - 1, Math.floor((b.y + b.height - 1) / cellH));
+            for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) fusedCells.add(`${r},${c}`);
+        } else {
+            singles.push({ k, b });
         }
     }
-    return out;
+
+    // Union single contours per cell (a detached caption + its body land in
+    // the same cell and belong together).
+    const cellMap = new Map();
+    for (const s of singles) {
+        const cx = s.b.x + s.b.width / 2, cy = s.b.y + s.b.height / 2;
+        const c = Math.min(cols - 1, Math.max(0, Math.floor(cx / cellW)));
+        const r = Math.min(rows - 1, Math.max(0, Math.floor(cy / cellH)));
+        const key = `${r},${c}`;
+        if (fusedCells.has(key)) continue; // resolved by the fused path
+        let e = cellMap.get(key);
+        if (!e) { e = { ks: [], bx1: Infinity, by1: Infinity, bx2: -1, by2: -1 }; cellMap.set(key, e); }
+        e.ks.push(s.k);
+        e.bx1 = Math.min(e.bx1, s.b.x); e.by1 = Math.min(e.by1, s.b.y);
+        e.bx2 = Math.max(e.bx2, s.b.x + s.b.width); e.by2 = Math.max(e.by2, s.b.y + s.b.height);
+    }
+
+    const labels = cv.Mat.zeros(totalH, totalW, cv.CV_8U);
+    const rects = [];
+
+    for (const e of cellMap.values()) {
+        const id = rects.length + 1;
+        if (hasDraw) for (const k of e.ks) cv.drawContours(labels, contours, k, new cv.Scalar(id), -1);
+        rects.push({ x: e.bx1, y: e.by1, width: e.bx2 - e.bx1, height: e.by2 - e.by1, id });
+    }
+
+    // Fused clusters: split at cell boundaries (unavoidable when outlines
+    // truly touch). Per cell, take the content box, dropping thin
+    // edge-hugging strips that are a neighbor bleeding across the line.
+    for (const key of fusedCells) {
+        const [r, c] = key.split(',').map(Number);
+        const x = Math.round(c * cellW), y = Math.round(r * cellH);
+        const w = Math.min(totalW, Math.round((c + 1) * cellW)) - x;
+        const h = Math.min(totalH, Math.round((r + 1) * cellH)) - y;
+        const roiView = mask.roi(new cv.Rect(x, y, w, h));
+        const cellMask = new cv.Mat();
+        roiView.copyTo(cellMask);
+        roiView.delete();
+        const cc = new cv.MatVector();
+        const chh = new cv.Mat();
+        cv.findContours(cellMask, cc, chh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+        const entries = [];
+        for (let k = 0; k < cc.size(); k++) {
+            const b = cv.boundingRect(cc.get(k));
+            if (b.width < 8 || b.height < 8) continue;
+            entries.push({ k, b });
+        }
+        const isStrip = (b) =>
+            ((b.y <= 1 || b.y + b.height >= h - 1) && b.height < cellH * 0.15) ||
+            ((b.x <= 1 || b.x + b.width >= w - 1) && b.width < cellW * 0.15);
+        const content = entries.filter((e) => !isStrip(e.b));
+        const use = content.length > 0 ? content : entries;
+        let bx1 = Infinity, by1 = Infinity, bx2 = -1, by2 = -1;
+        for (const e of use) {
+            bx1 = Math.min(bx1, e.b.x); by1 = Math.min(by1, e.b.y);
+            bx2 = Math.max(bx2, e.b.x + e.b.width); by2 = Math.max(by2, e.b.y + e.b.height);
+        }
+        if (bx2 > bx1 && bx2 - bx1 > 8 && by2 - by1 > 8) {
+            const id = rects.length + 1;
+            // Paint only the kept (content) contours, offset to global
+            // coords, so dropped strips stay label 0 (transparent).
+            if (hasDraw) for (const e of use) cv.drawContours(labels, cc, e.k, new cv.Scalar(id), -1, cv.LINE_8, chh, 0, new cv.Point(x, y));
+            rects.push({ x: x + bx1, y: y + by1, width: bx2 - bx1, height: by2 - by1, id });
+        }
+        cc.delete(); chh.delete(); cellMask.delete();
+    }
+
+    contours.delete(); hier.delete();
+
+    // Emit in row-major grid order so the caller's index-based sticker
+    // labels and zip filenames line up with the sheet. Each rect keeps its
+    // own `id` (matching `labels`), so reordering is safe.
+    rects.sort((a, b) => {
+        const ra = Math.floor((a.y + a.height / 2) / cellH), rb = Math.floor((b.y + b.height / 2) / cellH);
+        if (ra !== rb) return ra - rb;
+        return (a.x + a.width / 2) - (b.x + b.width / 2);
+    });
+    return { rects, labels };
 };
 
 // Suppresses green spill on the semi-transparent edge band (mutates in place).
@@ -376,14 +429,16 @@ const sliceSheet = async ({ imageBitmap, rows, cols, targetW, targetH, padding, 
 
     const merged = mergeFragments(boxes, cellW, cellH);
     let finalRects = clusterToGrid(merged, rows, cols, cellW, cellH);
+    let labels = null;
     if (!finalRects) {
-        console.warn('[Slicer] Gap clustering did not resolve cleanly; slicing by the known grid instead.');
-        finalRects = cellwiseRects(cv, mask, rows, cols);
+        console.warn('[Slicer] Gap clustering did not resolve cleanly; slicing by ownership instead.');
+        const own = ownershipRects(cv, mask, rows, cols);
+        finalRects = own.rects;
+        labels = own.labels; // per-sticker id map for alpha isolation
     }
 
-    // Merge the mask into src's alpha channel only NOW: cellwiseRects may
-    // have scrubbed neighbor-overflow strips off the mask, and those pixels
-    // must end up transparent in the crops.
+    // Merge the matte into src's alpha channel. Per-sticker isolation
+    // (labels) is applied per crop below, on top of this.
     const rgbaPlanes = new cv.MatVector();
     cv.split(src, rgbaPlanes);
     const rP = rgbaPlanes.get(0);
@@ -411,6 +466,18 @@ const sliceSheet = async ({ imageBitmap, rows, cols, targetW, targetH, padding, 
         const channels = new cv.MatVector();
         cv.split(finalRoi, channels);
         const alphaChannel = channels.get(3);
+        // Ownership isolation: keep only this sticker's own pixels. Without
+        // it, a crop box that overlaps an overflowing neighbor would drag
+        // the neighbor's pixels in; with it, everything outside this
+        // sticker's contour(s) goes transparent.
+        if (labels && tight.id) {
+            const labRoi = labels.roi(absRect);
+            const idMat = new cv.Mat(labRoi.rows, labRoi.cols, labRoi.type(), new cv.Scalar(tight.id));
+            const eq = new cv.Mat();
+            cv.compare(labRoi, idMat, eq, cv.CMP_EQ); // 255 where labels == id
+            cv.bitwise_and(alphaChannel, eq, alphaChannel);
+            labRoi.delete(); idMat.delete(); eq.delete();
+        }
         const ksize = new cv.Size(5, 5);
         cv.GaussianBlur(alphaChannel, alphaChannel, ksize, 0, 0);
         channels.set(3, alphaChannel);
@@ -457,6 +524,7 @@ const sliceSheet = async ({ imageBitmap, rows, cols, targetW, targetH, padding, 
     }
 
     src.delete(); mask.delete(); kernel.delete();
+    if (labels) labels.delete();
     return blobs;
 };
 
