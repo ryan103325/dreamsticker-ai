@@ -1414,8 +1414,9 @@ export const App = () => {
                     className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-bold shadow-sm border ${theme === 'dark' ? 'bg-white/10 border-white/15 text-indigo-100' : 'bg-white border-indigo-100 text-indigo-600'}`}
                     title={t('platformLabel')}
                 >
-                    <span className="text-xs opacity-70 uppercase tracking-wider">{t('platformLabel')}</span>
-                    <span className={`w-1.5 h-1.5 rounded-full ${theme === 'dark' ? 'bg-indigo-300' : 'bg-indigo-500'}`} />
+                    {/* Icon, not the literal 目標平台 label, so it doesn't
+                        duplicate the selector's own label on the upload step. */}
+                    <span aria-hidden>🎯</span>
                     <span>{t(`platform_${platformId}`)}</span>
                     <span className="opacity-60 font-normal">· {stickerQuantity}{t('stickerCountUnit')}</span>
                 </div>
