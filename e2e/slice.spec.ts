@@ -393,6 +393,82 @@ test('greenish text survives keying and neighbor overflow is not cropped in', as
     expect(counts.tonguePct).toBeLessThan(0.3);
 });
 
+test('a sticker whose outline overflows its cell is not sliced off flat', async ({ page }) => {
+    test.setTimeout(120_000);
+
+    // Real generated stickers routinely bleed a few percent past their grid
+    // line. The old per-cell-clamped fallback sliced that overflow off,
+    // leaving a flat cut across the white outline (user report on the dog
+    // sheet). Ownership slicing keeps each sticker's full contour, so the
+    // rounded outline survives with transparent margin all around.
+    await page.goto('/');
+    await page.getByPlaceholder(/API KEY/i).fill('test-key-1234567890');
+    await page.getByRole('button', { name: /開始創作/ }).click();
+    await page.getByRole('heading', { name: '上傳底圖' }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: '16', exact: true }).click();
+
+    const base64 = await page.evaluate(() => {
+        const cols = 4, rows = 4, cellW = 370, cellH = 320;
+        const c = document.createElement('canvas');
+        c.width = cellW * cols; c.height = cellH * rows;
+        const ctx = c.getContext('2d')!;
+        ctx.fillStyle = '#00FF00';
+        ctx.fillRect(0, 0, c.width, c.height);
+        const colors = ['#e74c3c', '#3498db', '#f39c12', '#9b59b6', '#c0392b', '#e67e22', '#2c3e50', '#d35400',
+                        '#8e44ad', '#2980b9', '#b03a2e', '#ca6f1e', '#7f8c8d', '#a04000', '#cb4335', '#2471a3'];
+        // Each sticker: a rounded body with a WHITE outline, drawn tall so
+        // its bottom outline crosses the grid line into the next row. Cells
+        // stay separated by a green river (not fused) so this exercises the
+        // single-contour ownership path, not the fused path.
+        for (let r = 0; r < rows; r++) for (let col = 0; col < cols; col++) {
+            const cx = col * cellW + cellW / 2;
+            const cy = r * cellH + cellH / 2 + 30; // pushed down -> overflows bottom
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.ellipse(cx, cy, cellW * 0.42, cellH * 0.52, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = colors[r * cols + col];
+            ctx.beginPath(); ctx.ellipse(cx, cy, cellW * 0.38, cellH * 0.48, 0, 0, Math.PI * 2); ctx.fill();
+        }
+        return c.toDataURL('image/png').split(',')[1];
+    });
+    await page.locator('input[type=file]').last().setInputFiles({
+        name: 'sheet.png', mimeType: 'image/png', buffer: Buffer.from(base64, 'base64'),
+    });
+
+    const sliceButton = page.getByRole('button', { name: /綠幕自動切割/ });
+    await expect(sliceButton).toBeVisible({ timeout: 60_000 });
+    await sliceButton.click();
+    await expect(page.getByText(/貼圖完成/)).toBeVisible({ timeout: 60_000 });
+    const cards = page.locator('main img');
+    await expect.poll(async () => cards.count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(16);
+
+    // For a top-row sticker (overflows downward): its opaque content must
+    // NOT run to the crop's bottom edge as a flat line. A cut shows up as
+    // an almost-fully-opaque bottom row with ~zero transparent margin; an
+    // intact rounded outline leaves a clear transparent margin below.
+    const bottom = await page.evaluate(async () => {
+        const img = document.querySelector('main img') as HTMLImageElement;
+        const bmp = await createImageBitmap(img);
+        const cc = document.createElement('canvas');
+        cc.width = bmp.width; cc.height = bmp.height;
+        const cx = cc.getContext('2d')!;
+        cx.drawImage(bmp, 0, 0);
+        const d = cx.getImageData(0, 0, bmp.width, bmp.height).data;
+        const opaque = (x: number, y: number) => d[(y * bmp.width + x) * 4 + 3] > 60;
+        let botY = -1;
+        for (let y = bmp.height - 1; y >= 0 && botY < 0; y--)
+            for (let x = 0; x < bmp.width; x++) if (opaque(x, y)) { botY = y; break; }
+        const botRow = botY < 0 ? 0 : Array.from({ length: bmp.width }, (_, x) => opaque(x, botY)).filter(Boolean).length;
+        return { margin: bmp.height - 1 - botY, flatFrac: botRow / bmp.width };
+    });
+    // The decisive signal is the transparent margin below the content: a
+    // flat cut leaves ~0 margin, an intact outline leaves a clear one. The
+    // observed real cuts also ran the bottom row ~0.85-0.96 across the full
+    // width; an intact rounded bottom here is ~0.55, so 0.75 separates them.
+    expect(bottom.margin).toBeGreaterThan(2);
+    expect(bottom.flatFrac).toBeLessThan(0.75);
+});
+
 test('main thread stays responsive while OpenCV initializes (no Page Unresponsive freeze)', async ({ page }) => {
     test.setTimeout(120_000);
 
