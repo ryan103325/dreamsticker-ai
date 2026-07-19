@@ -1488,7 +1488,7 @@ export const App = () => {
 
             {/* Persistent target-platform badge: shown on every step so the
                 user always knows which platform they're building for. */}
-            <div className="max-w-7xl mx-auto px-6 -mt-2 flex justify-center">
+            <div className="max-w-7xl mx-auto px-6 mt-5 flex justify-center">
                 <div
                     className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-bold shadow-sm border ${theme === 'dark' ? 'bg-white/10 border-white/15 text-indigo-100' : 'bg-white border-indigo-100 text-indigo-600'}`}
                     title={t('platformLabel')}
