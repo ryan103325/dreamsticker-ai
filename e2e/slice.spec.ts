@@ -469,6 +469,74 @@ test('a sticker whose outline overflows its cell is not sliced off flat', async 
     expect(bottom.flatFrac).toBeLessThan(0.75);
 });
 
+test('emoji format (COVER fit, 180px square cells) slices full-bleed and neighbor-free', async ({ page }) => {
+    test.setTimeout(120_000);
+
+    // The slicer must work for more than the default LINE sticker shape:
+    // emoji use square 180px cells, COVER fit (full-bleed, no white
+    // outline). Select that platform, then confirm each cell is sliced to
+    // 180x180, fills the frame, and carries only its own color.
+    await page.goto('/');
+    await page.getByPlaceholder(/API KEY/i).fill('test-key-1234567890');
+    await page.getByRole('button', { name: /開始創作/ }).click();
+    await page.getByRole('button', { name: 'LINE 表情貼', exact: true }).click();
+    await page.getByRole('heading', { name: '上傳底圖' }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: '16', exact: true }).click();
+
+    const palette = ['#e74c3c', '#e67e22', '#f1c40f', '#9b59b6', '#c0392b', '#d35400', '#8e44ad', '#2c3e50',
+                     '#e84393', '#d63031', '#6c5ce7', '#fd79a8', '#e17055', '#a29bfe', '#fab1a0', '#ff7675'];
+    const base64 = await page.evaluate((COL) => {
+        const cols = 4, rows = 4, cell = 256;
+        const c = document.createElement('canvas');
+        c.width = cell * cols; c.height = cell * rows;
+        const ctx = c.getContext('2d')!;
+        ctx.fillStyle = '#00FF00'; ctx.fillRect(0, 0, c.width, c.height);
+        // A character centered in each cell with a green margin (as the
+        // generator produces), distinct color per cell.
+        for (let r = 0; r < rows; r++) for (let col = 0; col < cols; col++) {
+            const m = Math.round(cell * 0.09);
+            ctx.fillStyle = COL[r * cols + col];
+            ctx.beginPath();
+            ctx.ellipse(col * cell + cell / 2, r * cell + cell / 2, cell / 2 - m, cell / 2 - m, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        return c.toDataURL('image/png').split(',')[1];
+    }, palette);
+    await page.locator('input[type=file]').last().setInputFiles({
+        name: 'emoji.png', mimeType: 'image/png', buffer: Buffer.from(base64, 'base64'),
+    });
+
+    const sliceButton = page.getByRole('button', { name: /綠幕自動切割/ });
+    await expect(sliceButton).toBeVisible({ timeout: 60_000 });
+    await sliceButton.click();
+    await expect(page.getByText(/貼圖完成/)).toBeVisible({ timeout: 60_000 });
+    const cards = page.locator('main img');
+    await expect.poll(async () => cards.count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(16);
+
+    const stats = await page.evaluate(async () => {
+        const first = document.querySelector('main img') as HTMLImageElement;
+        const bmp = await createImageBitmap(first);
+        const cc = document.createElement('canvas');
+        cc.width = bmp.width; cc.height = bmp.height;
+        const cx = cc.getContext('2d')!;
+        cx.drawImage(bmp, 0, 0);
+        const d = cx.getImageData(0, 0, bmp.width, bmp.height).data;
+        let green = 0, opaque = 0;
+        for (let i = 0; i < d.length; i += 4) {
+            if (d[i + 3] < 120) continue;
+            opaque++;
+            if (d[i + 1] > 150 && d[i] < 110 && d[i + 2] < 110) green++;
+        }
+        // COVER fill: opaque content should cover most of the frame.
+        return { w: bmp.width, h: bmp.height, greenPct: (green / Math.max(1, opaque)) * 100, fill: opaque / (bmp.width * bmp.height) };
+    });
+    expect(stats.w).toBe(180);
+    expect(stats.h).toBe(180);
+    expect(stats.greenPct).toBeLessThan(3);   // no residual green key
+    expect(stats.fill).toBeGreaterThan(0.55);  // COVER fills the frame, not a sliver
+});
+
 test('main thread stays responsive while OpenCV initializes (no Page Unresponsive freeze)', async ({ page }) => {
     test.setTimeout(120_000);
 
