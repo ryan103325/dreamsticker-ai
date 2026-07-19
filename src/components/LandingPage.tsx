@@ -79,133 +79,135 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
 
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900 text-white p-6 relative overflow-hidden">
+        // Direction "modern-cute but restrained": one warm surface, a single
+        // coral accent, solid cards/buttons — no gradient blobs, no
+        // glassmorphism, no decorative gradients (the old "AI look").
+        <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-[#FBF7F4] text-slate-900 p-6 relative">
             <ApiKeyModal isOpen={showGuideModal} onClose={() => setShowGuideModal(false)} />
 
             {/* Language Toggle */}
             <button
                 onClick={toggleLang}
-                className="absolute top-6 right-6 z-50 bg-white/10 backdrop-blur border border-white/20 px-4 py-2 rounded-full font-bold hover:bg-white/20 transition-all text-sm flex items-center gap-2"
+                className="absolute top-6 right-6 z-50 bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-full font-bold hover:bg-slate-50 transition-colors text-sm shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E9502D]"
             >
-                <span>🌐</span> {language === 'zh' ? 'English' : '繁體中文'}
+                {language === 'zh' ? 'English' : '繁體中文'}
             </button>
 
-            {/* Background Decorations */}
-            <div className="absolute top-20 left-20 w-72 h-72 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
-            <div className="absolute top-20 right-20 w-72 h-72 bg-indigo-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
-            <div className="absolute -bottom-8 left-1/2 w-72 h-72 bg-pink-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>
-
-            <div className="max-w-md w-full bg-white/10 backdrop-blur-lg border border-white/20 rounded-3xl p-8 shadow-2xl relative z-10">
+            <div className="max-w-md w-full">
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-24 h-24 bg-white/10 rounded-3xl mb-4 shadow-lg transform rotate-3 hover:rotate-6 transition-transform overflow-hidden backdrop-blur-sm border border-white/20">
+                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4 shadow-sm overflow-hidden border border-slate-200 bg-white">
                         <img src="./logo.png" alt="DreamSticker AI" className="w-full h-full object-cover" />
                     </div>
-                    <h1 className="text-4xl font-black mb-2 bg-clip-text text-transparent bg-gradient-to-r from-white to-indigo-200">DreamSticker AI</h1>
-                    <p className="text-indigo-200">{t('landingTitle')}</p>
+                    <h1 className="text-4xl font-black mb-2 tracking-tight text-slate-900">DreamSticker <span className="text-[#E9502D]">AI</span></h1>
+                    <p className="text-slate-500">{t('landingTitle')}</p>
                 </div>
 
-                {isGoogleLoginEnabled() && (
-                    <div className="mb-6 flex flex-col items-center gap-3">
-                        {profile ? (
-                            <div className="flex items-center gap-3 bg-white/10 border border-white/20 rounded-full pl-1.5 pr-4 py-1.5">
-                                <img src={profile.picture} alt={profile.name} referrerPolicy="no-referrer" className="w-8 h-8 rounded-full" />
-                                <div className="text-left">
-                                    <p className="text-xs font-bold text-white leading-tight">{profile.name}</p>
-                                    <p className="text-[10px] text-indigo-300 leading-tight">{profile.email}</p>
+                <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.12)]">
+                    {isGoogleLoginEnabled() && (
+                        <div className="mb-6 flex flex-col items-center gap-3">
+                            {profile ? (
+                                <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-full pl-1.5 pr-4 py-1.5">
+                                    <img src={profile.picture} alt={profile.name} referrerPolicy="no-referrer" className="w-8 h-8 rounded-full" />
+                                    <div className="text-left">
+                                        <p className="text-xs font-bold text-slate-800 leading-tight">{profile.name}</p>
+                                        <p className="text-[10px] text-slate-400 leading-tight">{profile.email}</p>
+                                    </div>
                                 </div>
+                            ) : (
+                                <div ref={googleBtnRef} className="flex justify-center min-h-[44px]" />
+                            )}
+                            <div className="w-full flex items-center gap-3 text-[10px] text-slate-300">
+                                <div className="flex-1 h-px bg-slate-200"></div>
+                                <span className="text-slate-400 font-medium">API Key</span>
+                                <div className="flex-1 h-px bg-slate-200"></div>
                             </div>
-                        ) : (
-                            <div ref={googleBtnRef} className="flex justify-center min-h-[44px]" />
-                        )}
-                        <div className="w-full flex items-center gap-3 text-[10px] text-white/30">
-                            <div className="flex-1 h-px bg-white/10"></div>
-                            <span>API Key</span>
-                            <div className="flex-1 h-px bg-white/10"></div>
                         </div>
-                    </div>
-                )}
+                    )}
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div>
-                        <label className="block text-sm font-medium text-indigo-200 mb-2">{t('apiKeyLabel')}</label>
-                        <input
-                            type="password"
-                            required
-                            value={key}
-                            onChange={(e) => setKey(e.target.value)}
-                            placeholder={t('apiKeyPlaceholder')}
-                            className="w-full px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all"
-                        />
-                    </div>
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        <div>
+                            <label htmlFor="api-key" className="block text-sm font-bold text-slate-700 mb-2">{t('apiKeyLabel')}</label>
+                            <input
+                                id="api-key"
+                                type="password"
+                                required
+                                value={key}
+                                onChange={(e) => setKey(e.target.value)}
+                                placeholder={t('apiKeyPlaceholder')}
+                                className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E9502D] focus:border-[#E9502D] transition-all"
+                            />
+                        </div>
 
-                    <div>
+                        <div>
+                            <button
+                                type="button"
+                                onClick={() => setShowAdvanced(!showAdvanced)}
+                                className="text-[11px] text-slate-400 hover:text-slate-600 font-bold flex items-center gap-1 transition-colors"
+                            >
+                                <span>{showAdvanced ? '▾' : '▸'}</span> {t('advancedOptions')}
+                            </button>
+                            {showAdvanced && (
+                                <div className="mt-3 space-y-2 animate-fade-in">
+                                    <label htmlFor="openai-key" className="block text-xs font-bold text-slate-600">{t('openaiKeyLabel')}</label>
+                                    <input
+                                        id="openai-key"
+                                        type="password"
+                                        value={openaiKey}
+                                        onChange={(e) => setOpenaiKey(e.target.value)}
+                                        placeholder={t('openaiKeyPlaceholder')}
+                                        className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E9502D] focus:border-[#E9502D] transition-all"
+                                    />
+                                    <p className="text-[10px] text-slate-400 leading-relaxed">{t('openaiKeyNote')}</p>
+
+                                    <label htmlFor="hf-key" className="block text-xs font-bold text-slate-600 pt-2">{t('hfKeyLabel')}</label>
+                                    <input
+                                        id="hf-key"
+                                        type="password"
+                                        value={hfToken}
+                                        onChange={(e) => setHfToken(e.target.value)}
+                                        placeholder={t('hfKeyPlaceholder')}
+                                        className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E9502D] focus:border-[#E9502D] transition-all"
+                                    />
+                                    <p className="text-[10px] text-slate-400 leading-relaxed">{t('hfKeyNote')}</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                checked={remember}
+                                onChange={(e) => setRemember(e.target.checked)}
+                                className="w-4 h-4 rounded accent-[#E9502D]"
+                            />
+                            {t('rememberKey')}
+                        </label>
+
                         <button
-                            type="button"
-                            onClick={() => setShowAdvanced(!showAdvanced)}
-                            className="text-[11px] text-indigo-300/80 hover:text-indigo-200 font-bold flex items-center gap-1 transition-colors"
+                            type="submit"
+                            className="w-full py-3.5 bg-[#E9502D] hover:bg-[#C33F20] text-white font-bold rounded-xl shadow-sm transition-colors active:scale-[0.99] flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#E9502D]"
                         >
-                            <span>{showAdvanced ? '▾' : '▸'}</span> {t('advancedOptions')}
+                            <span>{t('startBtn')}</span>
+                            <MagicWandIcon />
                         </button>
-                        {showAdvanced && (
-                            <div className="mt-3 space-y-2 animate-fade-in">
-                                <label className="block text-xs font-medium text-indigo-200">{t('openaiKeyLabel')}</label>
-                                <input
-                                    type="password"
-                                    value={openaiKey}
-                                    onChange={(e) => setOpenaiKey(e.target.value)}
-                                    placeholder={t('openaiKeyPlaceholder')}
-                                    className="w-full px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition-all"
-                                />
-                                <p className="text-[10px] text-white/40 leading-relaxed">{t('openaiKeyNote')}</p>
+                    </form>
 
-                                <label className="block text-xs font-medium text-indigo-200 pt-2">{t('hfKeyLabel')}</label>
-                                <input
-                                    type="password"
-                                    value={hfToken}
-                                    onChange={(e) => setHfToken(e.target.value)}
-                                    placeholder={t('hfKeyPlaceholder')}
-                                    className="w-full px-4 py-3 rounded-xl bg-black/30 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent transition-all"
-                                />
-                                <p className="text-[10px] text-white/40 leading-relaxed">{t('hfKeyNote')}</p>
-                            </div>
-                        )}
+                    <div className="mt-6 text-center text-xs text-slate-500 flex flex-col items-center gap-2">
+                        <p>{t('noKey')}</p>
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[#C33F20] hover:text-[#9D341D] font-bold text-sm bg-[#FFF1EC] px-4 py-2 rounded-full border border-[#FFCDBC] hover:border-[#FFAA8F] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E9502D]">
+                            {t('getBillingKey')}
+                        </a>
+
+                        <button
+                            onClick={() => setShowGuideModal(true)}
+                            className="mt-2 text-slate-400 hover:text-slate-600 underline text-[10px] transition-colors"
+                        >
+                            {t('howToApply')} ▶
+                        </button>
                     </div>
-
-                    <label className="flex items-center gap-2 text-xs text-indigo-200 cursor-pointer select-none">
-                        <input
-                            type="checkbox"
-                            checked={remember}
-                            onChange={(e) => setRemember(e.target.checked)}
-                            className="w-4 h-4 rounded accent-indigo-500"
-                        />
-                        {t('rememberKey')}
-                    </label>
-
-                    <button
-                        type="submit"
-                        className="w-full py-4 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-bold rounded-xl shadow-lg transform transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2"
-                    >
-                        <span>{t('startBtn')}</span>
-                        <MagicWandIcon />
-                    </button>
-                </form>
-
-                <div className="mt-6 text-center text-xs text-indigo-300 flex flex-col items-center gap-2">
-                    <p>{t('noKey')}</p>
-                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-amber-300 underline hover:text-amber-100 font-bold text-sm bg-black/30 px-4 py-2 rounded-full border border-amber-500/30 hover:border-amber-400 transition-all">
-                        {t('getBillingKey')}
-                    </a>
-
-                    <button
-                        onClick={() => setShowGuideModal(true)}
-                        className="mt-2 text-white/50 hover:text-white underline text-[10px] transition-colors flex items-center gap-1"
-                    >
-                        {t('howToApply')} <span className="text-[8px]">▶</span>
-                    </button>
                 </div>
-                <div className="mt-4 text-center text-[10px] text-white/40">
-                    <p>{t('localSave')}</p>
-                </div>
+
+                <p className="mt-4 text-center text-[10px] text-slate-400">{t('localSave')}</p>
             </div>
         </div>
     );
