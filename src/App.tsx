@@ -1539,13 +1539,12 @@ export const App = () => {
                                     </div>
                                 )}
 
-                                <div className="text-center space-y-4">
-                                    <h2 className={`text-4xl font-black ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{t('mainTitle')}</h2>
-                                    <p className={`text-lg ${theme === 'dark' ? 'text-indigo-200' : 'text-slate-500'}`}>{t('mainSubtitle')}</p>
+                                <div className="text-center">
+                                    <h2 className={`text-4xl font-black tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{t('mainTitle')}</h2>
                                 </div>
 
                                 {/* TARGET PLATFORM SELECTOR — compact dropdown */}
-                                <div className="flex items-center justify-center mt-8 mb-2 gap-3">
+                                <div className="flex items-center justify-center mt-8 mb-6 gap-3">
                                     <span className={`text-xs font-bold uppercase tracking-widest ${theme === 'dark' ? 'text-zinc-500' : 'text-slate-400'}`}>{t('platformLabel')}</span>
                                     <div className="relative">
                                         <button
@@ -1578,9 +1577,6 @@ export const App = () => {
                                             </>
                                         )}
                                     </div>
-                                </div>
-                                <div className={`text-center text-xs mb-8 animate-fade-in ${theme === 'dark' ? 'text-zinc-500' : 'text-slate-400'}`}>
-                                    {t(`platformNote_${platformId}`)}
                                 </div>
 
                                 {/* GENERATION ENGINE + QUALITY / COST SWITCHER */}
@@ -1632,13 +1628,6 @@ export const App = () => {
                                             {t('qualityPro')}
                                         </button>
                                     </div>
-                                    <p className={`text-[11px] max-w-lg text-center ${theme === 'dark' ? 'text-indigo-300/70' : 'text-slate-400'}`}>
-                                        {imageEngine === 'HF'
-                                            ? t('engineHFHint')
-                                            : imageEngine === 'OPENAI'
-                                                ? (genQuality === 'QUALITY' ? t('qualityProHintOpenAI') : t('qualityEcoHintOpenAI'))
-                                                : (genQuality === 'QUALITY' ? t('qualityProHint') : t('qualityEcoHint'))}
-                                    </p>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-12">

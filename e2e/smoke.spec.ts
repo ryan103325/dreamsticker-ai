@@ -33,12 +33,9 @@ test('key gate opens the main app with the platform selector', async ({ page }) 
         await expect(page.getByRole('option', { name, exact: true })).toBeVisible();
     }
 
-    // Default platform note (LINE stickers)
-    await expect(page.getByText(/370×320 px PNG/)).toBeVisible();
-
-    // Choosing a platform from the dropdown swaps the note
+    // Choosing a platform from the dropdown updates the trigger label
     await page.getByRole('option', { name: 'WhatsApp', exact: true }).click();
-    await expect(page.getByText(/每張 <100KB/)).toBeVisible();
+    await expect(page.getByRole('button', { name: /WhatsApp/ }).first()).toBeVisible();
 
     // All four input-mode cards render
     for (const mode of ['照片轉 IP', '現有 IP', '文字生成 IP', '上傳底圖']) {
@@ -50,12 +47,12 @@ test('platform choice persists across reloads', async ({ page }) => {
     await enterApp(page);
     await page.getByRole('button', { name: /LINE 貼圖/ }).first().click(); // open dropdown
     await page.getByRole('option', { name: 'Telegram', exact: true }).click();
-    await expect(page.getByText(/@Stickers 機器人/)).toBeVisible();
+    await expect(page.getByRole('button', { name: /Telegram/ }).first()).toBeVisible();
 
     // The key is session-only, so re-enter after reload; the platform sticks
     await page.reload();
     await enterApp(page);
-    await expect(page.getByText(/@Stickers 機器人/)).toBeVisible();
+    await expect(page.getByRole('button', { name: /Telegram/ }).first()).toBeVisible();
 });
 
 test('mobile viewport has no horizontal overflow', async ({ page }) => {
