@@ -26,7 +26,7 @@ import { processGreenScreenAndSlice, waitForOpenCV } from './services/opencvServ
 import { Loader } from './components/Loader';
 import { MagicEditor } from './components/MagicEditor';
 import { HelpModal } from './components/HelpModal';
-import { UploadIcon, MagicWandIcon, StickerIcon, DownloadIcon, RefreshIcon, EditIcon, CloseIcon, HelpIcon, StarIcon, CopyIcon, ExternalLinkIcon, FolderOpenIcon, DiceIcon, TrashIcon, ArrowLeftIcon } from './components/Icons';
+import { UploadIcon, MagicWandIcon, StickerIcon, DownloadIcon, RefreshIcon, EditIcon, CloseIcon, HelpIcon, StarIcon, CopyIcon, ExternalLinkIcon, FolderOpenIcon, DiceIcon, TrashIcon, ArrowLeftIcon, CameraIcon, ImageIcon, TypeIcon, FolderIcon } from './components/Icons';
 import { LandingPage } from './components/LandingPage';
 import { WorksGallery } from './components/WorksGallery';
 import { loadApiKey, clearApiKey } from './services/storageUtils';
@@ -1557,7 +1557,7 @@ export const App = () => {
                                         ))}
                                     </div>
                                 </div>
-                                <div className="text-center text-sm text-pink-500 font-bold mb-8 animate-fade-in">
+                                <div className={`text-center text-xs mb-8 animate-fade-in ${theme === 'dark' ? 'text-zinc-500' : 'text-slate-400'}`}>
                                     {t(`platformNote_${platformId}`)}
                                 </div>
 
@@ -1613,26 +1613,24 @@ export const App = () => {
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-12">
-                                    <div onClick={() => { setInputMode('PHOTO'); setCharCount(1); }} className={`cursor-pointer p-8 rounded-3xl border-2 hover:-translate-y-1 transition-all group ${theme === 'dark' ? 'bg-white/10 border-white/10 hover:border-indigo-400 hover:bg-white/15 backdrop-blur-md shadow-lg ring-1 ring-white/5' : 'bg-white border-white hover:border-indigo-500 hover:shadow-xl'}`}>
-                                        <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">📸</div>
-                                        <h3 className={`text-xl font-bold mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{t('modePhoto')}</h3>
-                                        <p className={`text-sm ${theme === 'dark' ? 'text-indigo-200' : 'text-slate-500'}`}>{t('modePhotoDesc')}</p>
-                                    </div>
-                                    <div onClick={() => setInputMode('EXISTING_IP')} className={`cursor-pointer p-8 rounded-3xl border-2 hover:-translate-y-1 transition-all group ${theme === 'dark' ? 'bg-white/10 border-white/10 hover:border-purple-400 hover:bg-white/15 backdrop-blur-md shadow-lg ring-1 ring-white/5' : 'bg-white border-white hover:border-purple-500 hover:shadow-xl'}`}>
-                                        <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">🖼️</div>
-                                        <h3 className={`text-xl font-bold mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{t('modeExisting')}</h3>
-                                        <p className={`text-sm ${theme === 'dark' ? 'text-indigo-200' : 'text-slate-500'}`}>{t('modeExistingDesc')}</p>
-                                    </div>
-                                    <div onClick={() => setInputMode('TEXT_PROMPT')} className={`cursor-pointer p-8 rounded-3xl border-2 hover:-translate-y-1 transition-all group ${theme === 'dark' ? 'bg-white/10 border-white/10 hover:border-pink-400 hover:bg-white/15 backdrop-blur-md shadow-lg ring-1 ring-white/5' : 'bg-white border-white hover:border-pink-500 hover:shadow-xl'}`}>
-                                        <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">📝</div>
-                                        <h3 className={`text-xl font-bold mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{t('modeText')}</h3>
-                                        <p className={`text-sm ${theme === 'dark' ? 'text-indigo-200' : 'text-slate-500'}`}>{t('modeTextDesc')}</p>
-                                    </div>
-                                    <div onClick={() => setInputMode('UPLOAD_SHEET')} className={`cursor-pointer p-8 rounded-3xl border-2 hover:-translate-y-1 transition-all group ${theme === 'dark' ? 'bg-white/10 border-white/10 hover:border-amber-400 hover:bg-white/15 backdrop-blur-md shadow-lg ring-1 ring-white/5' : 'bg-white border-white hover:border-amber-500 hover:shadow-xl'}`}>
-                                        <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">📂</div>
-                                        <h3 className={`text-xl font-bold mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{t('modeUtility')}</h3>
-                                        <p className={`text-sm ${theme === 'dark' ? 'text-indigo-200' : 'text-slate-500'}`}>{t('modeUtilityDesc')}</p>
-                                    </div>
+                                    {([
+                                        { mode: 'PHOTO', Icon: CameraIcon, title: t('modePhoto'), desc: t('modePhotoDesc'), onClick: () => { setInputMode('PHOTO'); setCharCount(1); } },
+                                        { mode: 'EXISTING_IP', Icon: ImageIcon, title: t('modeExisting'), desc: t('modeExistingDesc'), onClick: () => setInputMode('EXISTING_IP') },
+                                        { mode: 'TEXT_PROMPT', Icon: TypeIcon, title: t('modeText'), desc: t('modeTextDesc'), onClick: () => setInputMode('TEXT_PROMPT') },
+                                        { mode: 'UPLOAD_SHEET', Icon: FolderIcon, title: t('modeUtility'), desc: t('modeUtilityDesc'), onClick: () => setInputMode('UPLOAD_SHEET') },
+                                    ] as const).map(({ mode, Icon, title, desc, onClick }) => (
+                                        <button
+                                            key={mode}
+                                            onClick={onClick}
+                                            className={`text-left cursor-pointer p-7 rounded-2xl border transition-all group hover:-translate-y-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F96A47] ${theme === 'dark' ? 'bg-white/[0.03] border-white/10 hover:border-[#F96A47]/60 hover:bg-white/[0.06]' : 'bg-white border-slate-200 hover:border-[#F96A47] hover:shadow-lg'}`}
+                                        >
+                                            <div className="mb-4 text-[#F96A47] group-hover:scale-110 transition-transform origin-left">
+                                                <Icon className="h-8 w-8" />
+                                            </div>
+                                            <h3 className={`text-lg font-bold mb-1.5 ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{title}</h3>
+                                            <p className={`text-sm leading-relaxed ${theme === 'dark' ? 'text-zinc-400' : 'text-slate-500'}`}>{desc}</p>
+                                        </button>
+                                    ))}
                                 </div>
                             </>
                         )}
