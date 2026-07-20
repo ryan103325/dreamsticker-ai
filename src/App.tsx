@@ -26,7 +26,7 @@ import { processGreenScreenAndSlice, waitForOpenCV } from './services/opencvServ
 import { Loader } from './components/Loader';
 import { MagicEditor } from './components/MagicEditor';
 import { HelpModal } from './components/HelpModal';
-import { UploadIcon, MagicWandIcon, StickerIcon, DownloadIcon, RefreshIcon, EditIcon, CloseIcon, HelpIcon, StarIcon, CopyIcon, ExternalLinkIcon, FolderOpenIcon, DiceIcon, TrashIcon, ArrowLeftIcon, CameraIcon, ImageIcon, TypeIcon, FolderIcon } from './components/Icons';
+import { UploadIcon, MagicWandIcon, StickerIcon, DownloadIcon, RefreshIcon, EditIcon, CloseIcon, HelpIcon, StarIcon, CopyIcon, ExternalLinkIcon, FolderOpenIcon, DiceIcon, TrashIcon, ArrowLeftIcon, CameraIcon, ImageIcon, TypeIcon, FolderIcon, ChevronDownIcon, CheckIcon } from './components/Icons';
 import { LandingPage } from './components/LandingPage';
 import { WorksGallery } from './components/WorksGallery';
 import { loadApiKey, clearApiKey } from './services/storageUtils';
@@ -483,6 +483,7 @@ export const App = () => {
         try { return getPlatform(localStorage.getItem('platform_id')).id; } catch { return DEFAULT_PLATFORM_ID; }
     });
     const platform = getPlatform(platformId);
+    const [platformMenuOpen, setPlatformMenuOpen] = useState(false);
     // Legacy product type, derived from the platform (EMOJI = full-bleed COVER)
     const stickerType = stickerTypeFor(platform);
 
@@ -1486,20 +1487,21 @@ export const App = () => {
                 isDark={theme === 'dark'}
             />
 
-            {/* Persistent target-platform badge: shown on every step so the
-                user always knows which platform they're building for. */}
-            <div className="max-w-7xl mx-auto px-6 mt-5 flex justify-center">
-                <div
-                    className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-bold shadow-sm border ${theme === 'dark' ? 'bg-white/10 border-white/15 text-indigo-100' : 'bg-white border-indigo-100 text-indigo-600'}`}
-                    title={t('platformLabel')}
-                >
-                    {/* Icon, not the literal 目標平台 label, so it doesn't
-                        duplicate the selector's own label on the upload step. */}
-                    <span aria-hidden>🎯</span>
-                    <span>{t(`platform_${platformId}`)}</span>
-                    <span className="opacity-60 font-normal">· {stickerQuantity}{t('stickerCountUnit')}</span>
+            {/* Target-platform badge — shown on every step EXCEPT the initial
+                selection screen (where the platform picker itself lives).
+                Showing it there is redundant: you haven't committed yet. */}
+            {!(appStep === AppStep.UPLOAD && !inputMode) && (
+                <div className="max-w-7xl mx-auto px-6 mt-5 flex justify-center">
+                    <div
+                        className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-bold border ${theme === 'dark' ? 'bg-white/[0.06] border-white/10 text-zinc-200' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}
+                        title={t('platformLabel')}
+                    >
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#F96A47]" />
+                        <span>{t(`platform_${platformId}`)}</span>
+                        <span className="opacity-60 font-normal">· {stickerQuantity}{t('stickerCountUnit')}</span>
+                    </div>
                 </div>
-            </div>
+            )}
 
             <main className="max-w-7xl mx-auto p-6 pt-10">
                 {appStep > AppStep.UPLOAD && (
@@ -1542,19 +1544,39 @@ export const App = () => {
                                     <p className={`text-lg ${theme === 'dark' ? 'text-indigo-200' : 'text-slate-500'}`}>{t('mainSubtitle')}</p>
                                 </div>
 
-                                {/* TARGET PLATFORM SELECTOR */}
-                                <div className="flex flex-col items-center mt-8 mb-4 gap-2">
-                                    <span className={`text-xs font-bold uppercase tracking-widest ${theme === 'dark' ? 'text-indigo-300/70' : 'text-slate-400'}`}>{t('platformLabel')}</span>
-                                    <div className={`p-1 rounded-xl flex flex-wrap justify-center gap-1 max-w-2xl ${theme === 'dark' ? 'bg-black/40 border border-white/10' : 'bg-slate-200'}`}>
-                                        {PLATFORM_LIST.map(p => (
-                                            <button
-                                                key={p.id}
-                                                onClick={() => handlePlatformChange(p.id)}
-                                                className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${platformId === p.id ? (theme === 'dark' ? 'bg-white/10 text-white shadow-lg border border-white/20' : 'bg-white text-indigo-600 shadow-md') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
-                                            >
-                                                {t(`platform_${p.id}`)}
-                                            </button>
-                                        ))}
+                                {/* TARGET PLATFORM SELECTOR — compact dropdown */}
+                                <div className="flex items-center justify-center mt-8 mb-2 gap-3">
+                                    <span className={`text-xs font-bold uppercase tracking-widest ${theme === 'dark' ? 'text-zinc-500' : 'text-slate-400'}`}>{t('platformLabel')}</span>
+                                    <div className="relative">
+                                        <button
+                                            type="button"
+                                            onClick={() => setPlatformMenuOpen(o => !o)}
+                                            aria-haspopup="listbox"
+                                            aria-expanded={platformMenuOpen}
+                                            className={`w-52 flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border font-bold text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F96A47] ${theme === 'dark' ? 'bg-white/[0.04] border-white/10 text-white hover:bg-white/[0.08]' : 'bg-white border-slate-200 text-slate-800 hover:border-slate-300 shadow-sm'}`}
+                                        >
+                                            <span>{t(`platform_${platformId}`)}</span>
+                                            <ChevronDownIcon className={`h-4 w-4 shrink-0 transition-transform ${platformMenuOpen ? 'rotate-180' : ''} ${theme === 'dark' ? 'text-zinc-400' : 'text-slate-400'}`} />
+                                        </button>
+                                        {platformMenuOpen && (
+                                            <>
+                                                <div className="fixed inset-0 z-30" onClick={() => setPlatformMenuOpen(false)} />
+                                                <div role="listbox" className={`absolute z-40 mt-2 w-full rounded-xl border overflow-hidden shadow-xl ${theme === 'dark' ? 'bg-zinc-900 border-white/10' : 'bg-white border-slate-200'}`}>
+                                                    {PLATFORM_LIST.map(p => (
+                                                        <button
+                                                            key={p.id}
+                                                            role="option"
+                                                            aria-selected={platformId === p.id}
+                                                            onClick={() => { handlePlatformChange(p.id); setPlatformMenuOpen(false); }}
+                                                            className={`w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left text-sm font-bold transition-colors ${platformId === p.id ? 'text-[#F96A47]' : (theme === 'dark' ? 'text-zinc-200 hover:bg-white/5' : 'text-slate-700 hover:bg-slate-50')}`}
+                                                        >
+                                                            <span>{t(`platform_${p.id}`)}</span>
+                                                            {platformId === p.id && <CheckIcon className="h-4 w-4 shrink-0" />}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                                 <div className={`text-center text-xs mb-8 animate-fade-in ${theme === 'dark' ? 'text-zinc-500' : 'text-slate-400'}`}>
@@ -1589,18 +1611,25 @@ export const App = () => {
                                             )}
                                         </div>
                                     )}
-                                    <div className={`p-1 rounded-xl gap-1 text-xs ${imageEngine === 'HF' ? 'hidden' : 'flex'} ${theme === 'dark' ? 'bg-black/40 border border-white/10' : 'bg-slate-200'}`}>
-                                        <button
-                                            onClick={() => handleQualityChange('QUALITY')}
-                                            className={`px-4 py-1.5 rounded-lg font-bold transition-all ${genQuality === 'QUALITY' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-indigo-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
-                                        >
-                                            💎 {t('qualityPro')}
-                                        </button>
+                                    {/* Quality slider: a 2-stop segmented control with a
+                                        sliding coral highlight (經濟 ↔ 高品質). */}
+                                    <div className={`relative ${imageEngine === 'HF' ? 'hidden' : 'inline-flex'} w-56 p-1 rounded-full border ${theme === 'dark' ? 'bg-white/[0.04] border-white/10' : 'bg-slate-100 border-slate-200'}`}>
+                                        <div
+                                            aria-hidden
+                                            className="absolute top-1 bottom-1 left-1 w-[calc(50%-0.25rem)] rounded-full bg-[#F96A47] shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                                            style={{ transform: genQuality === 'QUALITY' ? 'translateX(100%)' : 'translateX(0)' }}
+                                        />
                                         <button
                                             onClick={() => handleQualityChange('ECONOMY')}
-                                            className={`px-4 py-1.5 rounded-lg font-bold transition-all ${genQuality === 'ECONOMY' ? (theme === 'dark' ? 'bg-white/10 text-white border border-white/20' : 'bg-white text-emerald-600 shadow-sm') : (theme === 'dark' ? 'text-indigo-300 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
+                                            className={`relative z-10 flex-1 py-1.5 rounded-full text-xs font-bold transition-colors ${genQuality === 'ECONOMY' ? 'text-white' : (theme === 'dark' ? 'text-zinc-400' : 'text-slate-500')}`}
                                         >
-                                            🪙 {t('qualityEco')}
+                                            {t('qualityEco')}
+                                        </button>
+                                        <button
+                                            onClick={() => handleQualityChange('QUALITY')}
+                                            className={`relative z-10 flex-1 py-1.5 rounded-full text-xs font-bold transition-colors ${genQuality === 'QUALITY' ? 'text-white' : (theme === 'dark' ? 'text-zinc-400' : 'text-slate-500')}`}
+                                        >
+                                            {t('qualityPro')}
                                         </button>
                                     </div>
                                     <p className={`text-[11px] max-w-lg text-center ${theme === 'dark' ? 'text-indigo-300/70' : 'text-slate-400'}`}>
