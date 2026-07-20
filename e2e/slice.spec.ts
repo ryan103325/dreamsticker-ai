@@ -479,7 +479,10 @@ test('emoji format (COVER fit, 180px square cells) slices full-bleed and neighbo
     await page.goto('/');
     await page.getByPlaceholder(/API KEY/i).fill('test-key-1234567890');
     await page.getByRole('button', { name: /開始創作/ }).click();
-    await page.getByRole('button', { name: 'LINE 表情貼', exact: true }).click();
+    // Platform picker is now a dropdown: open it (default LINE sticker) and
+    // choose LINE Emoji.
+    await page.getByRole('button', { name: /LINE 貼圖/ }).first().click();
+    await page.getByRole('option', { name: 'LINE 表情貼', exact: true }).click();
     await page.getByRole('heading', { name: '上傳底圖' }).click();
     await page.waitForTimeout(300);
     await page.getByRole('button', { name: '16', exact: true }).click();
