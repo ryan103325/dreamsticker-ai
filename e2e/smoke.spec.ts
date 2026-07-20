@@ -26,17 +26,18 @@ test('landing page renders and language toggle works', async ({ page }) => {
 test('key gate opens the main app with the platform selector', async ({ page }) => {
     await enterApp(page);
 
-    // Platform selector shows all 7 targets
+    // Platform selector is a compact dropdown; open it to see all 7 targets.
     await expect(page.getByText('目標平台')).toBeVisible();
-    for (const name of ['LINE 貼圖', 'LINE 表情貼', 'Telegram', 'WhatsApp', 'Discord 貼圖', 'Discord Emoji', '微信表情']) {
-        await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /LINE 貼圖/ }).first().click();
+    for (const name of ['LINE 表情貼', 'Telegram', 'WhatsApp', 'Discord 貼圖', 'Discord Emoji', '微信表情']) {
+        await expect(page.getByRole('option', { name, exact: true })).toBeVisible();
     }
 
     // Default platform note (LINE stickers)
     await expect(page.getByText(/370×320 px PNG/)).toBeVisible();
 
-    // Switching platform swaps the note
-    await page.getByRole('button', { name: 'WhatsApp', exact: true }).click();
+    // Choosing a platform from the dropdown swaps the note
+    await page.getByRole('option', { name: 'WhatsApp', exact: true }).click();
     await expect(page.getByText(/每張 <100KB/)).toBeVisible();
 
     // All four input-mode cards render
@@ -47,7 +48,8 @@ test('key gate opens the main app with the platform selector', async ({ page }) 
 
 test('platform choice persists across reloads', async ({ page }) => {
     await enterApp(page);
-    await page.getByRole('button', { name: 'Telegram', exact: true }).click();
+    await page.getByRole('button', { name: /LINE 貼圖/ }).first().click(); // open dropdown
+    await page.getByRole('option', { name: 'Telegram', exact: true }).click();
     await expect(page.getByText(/@Stickers 機器人/)).toBeVisible();
 
     // The key is session-only, so re-enter after reload; the platform sticks
