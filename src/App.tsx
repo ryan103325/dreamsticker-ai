@@ -1405,7 +1405,7 @@ export const App = () => {
     }
 
     return (
-        <div className={`min-h-screen transition-colors duration-500 font-sans pb-20 selection:bg-indigo-200 selection:text-indigo-900 ${theme === 'dark' ? 'bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900 text-white' : 'bg-slate-50 text-slate-800'}`}>
+        <div className={`min-h-[100dvh] transition-colors duration-500 font-sans pb-20 selection:bg-[#F96A47]/30 ${theme === 'dark' ? 'bg-[#09090B] text-zinc-100' : 'bg-[#FAF8F6] text-slate-900'}`}>
             {/* Navbar */}
             <nav className={`sticky top-0 z-40 px-3 sm:px-6 py-4 flex justify-between items-center shadow-sm backdrop-blur-md transition-all ${theme === 'dark' ? 'bg-black/80 border-b border-white/10' : 'bg-white/80 border-b border-slate-200'}`}>
                 <div className="flex items-center gap-2 sm:gap-3 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => window.location.reload()}>
