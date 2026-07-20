@@ -652,6 +652,11 @@ export const App = () => {
     // `galleryOpen` toggles the gallery modal.
     const [works, setWorks] = useState<SavedWork[]>([]);
     const [galleryOpen, setGalleryOpen] = useState(false);
+    // True while viewing a work restored from the gallery. Such a work only
+    // has its finished stickers — the upstream IP/config/sheet state was never
+    // saved — so its results view is terminal and must not descend "back" into
+    // empty generation steps (which render blank).
+    const [isRestored, setIsRestored] = useState(false);
     // Stable id for the work currently being produced, so the repeated
     // auto-saves during STICKER_PROCESSING update ONE entry instead of
     // creating duplicates. Reset when leaving processing; set on restore.
@@ -693,6 +698,7 @@ export const App = () => {
         setZipFileName(work.zipFileName || 'MyStickers');
         setMainStickerId(work.mainStickerId ?? work.finalStickers[0]?.id ?? null);
         setGalleryOpen(false);
+        setIsRestored(true);
         workIdRef.current = work.id; // continue this entry, don't duplicate it
         setAppStep(AppStep.STICKER_PROCESSING);
     };
@@ -720,6 +726,16 @@ export const App = () => {
                 setAppStep(AppStep.STICKER_CONFIG);
             }
         } else if (appStep === AppStep.STICKER_PROCESSING) {
+            if (isRestored) {
+                // Restored work: no upstream steps exist. Return Home instead
+                // of descending into empty steps (which blank out), and KEEP
+                // the finished stickers — they stay in the gallery, so
+                // re-opening them from there needs no regeneration.
+                setIsRestored(false);
+                setInputMode(null);
+                setAppStep(AppStep.UPLOAD);
+                return;
+            }
             // Individual mode has no sheet to return to
             setAppStep(rawSheetUrls.length > 0 ? AppStep.SHEET_EDITOR : AppStep.STICKER_CONFIG);
             setFinalStickers([]);
@@ -1067,6 +1083,7 @@ export const App = () => {
 
     const handleGenerateIndividual = async () => {
         if (!generatedChar) return;
+        setIsRestored(false); // this is a fresh generation, not a restored work
         const initial: GeneratedImage[] = stickerConfigs.map(c => ({
             id: c.id,
             url: '',
@@ -1167,6 +1184,7 @@ export const App = () => {
 
     const handleAutoProcess = async () => {
         if (rawSheetUrls.length === 0) return;
+        setIsRestored(false); // this is a fresh slice, not a restored work
         if (!isOpenCVReady) {
             toast("影像處理模組尚未載入完成，請稍候再試。", 'error');
             return;
