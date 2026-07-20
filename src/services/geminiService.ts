@@ -857,7 +857,7 @@ export const generateStickerSheet = async (characterUrl: string, configs: Sticke
     - NO Green(#00FF00) inside the artwork.
     - If fading, gradient to TRANSPARENT or HARD CUT.No partial opacity on green.
 
-    ** ENGINEERING GAP:** Leave a clear ** Green River ** (empty space) of at least 15px between cells for slicing.
+    ** ENGINEERING GAP (ABSOLUTELY CRITICAL):** Each emoji is sliced apart automatically; if any two TOUCH, the slicer ruins both. Every emoji MUST be a separate island fully surrounded by pure green, with a WIDE green river of at least 12% of a cell (~30-40px) to every neighbour, horizontally and vertically. STRICTLY FORBIDDEN: any emoji, limb, or effect crossing into a neighbouring cell, or two emoji connected by even one pixel. Draw them smaller if needed to guarantee the gap. Do NOT fill cells edge-to-edge.
 
     [Instructions]
     ${gridInstructions}
@@ -893,14 +893,19 @@ ${sheetOutlineRule(platform.outline)}
     - Text should look 'bouncy' and 'elastic'.
     - Color: Text color must complement the character but stand out(high contrast).Avoid Green text.
 
-    ** ENGINEERING GAP:** You MUST leave a clear ** Green River ** (empty space) of at least 30px between every row and column.This is required for the automated slicing algorithm.
+    ** ENGINEERING GAP (ABSOLUTELY CRITICAL — HIGHEST PRIORITY):**
+    - Every sticker is sliced apart by an automated algorithm. If any two stickers TOUCH, the slicer cuts one sticker's white outline into its neighbour and BOTH are ruined. This is the single most important rule.
+    - Each sticker — INCLUDING its white outline, text, and any effects — MUST be a fully separate island, completely surrounded by pure green on all four sides.
+    - Leave a WIDE ** Green River ** of at least ** 12% of a cell (roughly 40-60px) ** between EVERY neighbouring sticker, both horizontally and vertically. When in doubt, draw the characters SMALLER to guarantee the gap.
+    - ** STRICTLY FORBIDDEN:** white outlines touching or overlapping; characters, limbs, tails, props, or text crossing into a neighbouring cell; any two stickers connected by even a single pixel. There must be a clean, unbroken green channel between all of them.
+    - Do NOT fill the cells edge-to-edge. Keep each sticker comfortably inside its own cell with green breathing room around it.
 
     [Instructions]
     ${gridInstructions}
 
-[FINAL CHECK]
-Spacing: Ensure > 3 % green gap between all stickers(Vertical & Horizontal).
-    Background: Pure Green, no artifacts.
+[FINAL CHECK — verify before output]
+1. SEPARATION: Is every single sticker fully surrounded by green, with a wide green gap (>=12% of a cell) to every neighbour? No white outline may touch another. If any touch, SHRINK the artwork and redo.
+2. Background: Pure Green (#00FF00), no artifacts, clean rivers between all rows and columns.
         `;
     }
 

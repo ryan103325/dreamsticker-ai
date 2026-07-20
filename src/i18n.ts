@@ -45,7 +45,7 @@ export const translations = {
         // Main App
         backStep: "返回上一步",
         nextStep: "下一步",
-        mainTitle: "創造您的專屬 IP 角色",
+        mainTitle: "打造你的專屬貼圖",
         mainSubtitle: "選擇一種方式開始，AI 將為您打造獨一無二的貼圖主角",
 
         // Modes
@@ -434,7 +434,7 @@ export const translations = {
         // Main App
         backStep: "Back",
         nextStep: "Next Step",
-        mainTitle: "Create Your Exclusive IP Character",
+        mainTitle: "Make your own stickers",
         mainSubtitle: "Choose a method to start, AI will build a unique character for you",
 
         // Modes
