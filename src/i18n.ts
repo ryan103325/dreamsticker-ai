@@ -44,6 +44,7 @@ export const translations = {
 
         // Main App
         backStep: "返回上一步",
+        goHome: "回首頁",
         nextStep: "下一步",
         mainTitle: "打造你的專屬貼圖",
         mainSubtitle: "選擇一種方式開始，AI 將為您打造獨一無二的貼圖主角",
@@ -433,6 +434,7 @@ export const translations = {
 
         // Main App
         backStep: "Back",
+        goHome: "Home",
         nextStep: "Next Step",
         mainTitle: "Make your own stickers",
         mainSubtitle: "Choose a method to start, AI will build a unique character for you",
