@@ -26,7 +26,7 @@ import { processGreenScreenAndSlice, waitForOpenCV } from './services/opencvServ
 import { Loader } from './components/Loader';
 import { MagicEditor } from './components/MagicEditor';
 import { HelpModal } from './components/HelpModal';
-import { UploadIcon, MagicWandIcon, StickerIcon, DownloadIcon, RefreshIcon, EditIcon, CloseIcon, HelpIcon, StarIcon, CopyIcon, ExternalLinkIcon, FolderOpenIcon, DiceIcon, TrashIcon, ArrowLeftIcon, CameraIcon, ImageIcon, TypeIcon, FolderIcon, ChevronDownIcon, CheckIcon } from './components/Icons';
+import { UploadIcon, MagicWandIcon, StickerIcon, DownloadIcon, RefreshIcon, EditIcon, CloseIcon, HelpIcon, StarIcon, CopyIcon, ExternalLinkIcon, FolderOpenIcon, DiceIcon, TrashIcon, ArrowLeftIcon, CameraIcon, ImageIcon, TypeIcon, FolderIcon, ChevronDownIcon, CheckIcon, HomeIcon } from './components/Icons';
 import { LandingPage } from './components/LandingPage';
 import { WorksGallery } from './components/WorksGallery';
 import { loadApiKey, clearApiKey } from './services/storageUtils';
@@ -684,6 +684,14 @@ export const App = () => {
                     stickerPackageInfo,
                     zipFileName,
                     mainStickerId,
+                    // Editable upstream state so a restored work can step back
+                    // and edit (see handleRestoreWork/handleBack).
+                    generatedChar,
+                    rawSheetUrls,
+                    stickerConfigs,
+                    inputMode,
+                    stickerQuantity,
+                    genMode,
                 }).then(refreshWorks);
             }
         }
@@ -697,8 +705,22 @@ export const App = () => {
         setStickerPackageInfo(work.stickerPackageInfo);
         setZipFileName(work.zipFileName || 'MyStickers');
         setMainStickerId(work.mainStickerId ?? work.finalStickers[0]?.id ?? null);
+
+        // Rehydrate the editable upstream state so the user can step BACK
+        // through the flow and edit (instead of dead-ending on blank steps).
+        setGeneratedChar(work.generatedChar ?? null);
+        setRawSheetUrls(work.rawSheetUrls ?? []);
+        if (work.stickerConfigs) setStickerConfigs(work.stickerConfigs);
+        setInputMode((work.inputMode as InputMode | null) ?? null);
+        if (typeof work.stickerQuantity === 'number') setStickerQuantity(work.stickerQuantity as StickerQuantity);
+        if (work.genMode) handleGenModeChange(work.genMode);
+
+        // Legacy saves lack the editable state; those stay view-only (back
+        // returns Home instead of blank steps).
+        const hasEditable = !!work.generatedChar || (work.rawSheetUrls?.length ?? 0) > 0;
+        setIsRestored(!hasEditable);
+
         setGalleryOpen(false);
-        setIsRestored(true);
         workIdRef.current = work.id; // continue this entry, don't duplicate it
         setAppStep(AppStep.STICKER_PROCESSING);
     };
@@ -727,20 +749,28 @@ export const App = () => {
             }
         } else if (appStep === AppStep.STICKER_PROCESSING) {
             if (isRestored) {
-                // Restored work: no upstream steps exist. Return Home instead
-                // of descending into empty steps (which blank out), and KEEP
-                // the finished stickers — they stay in the gallery, so
-                // re-opening them from there needs no regeneration.
+                // Legacy restore (no editable upstream state saved): there are
+                // no real steps to go back to, so return Home rather than
+                // blank out. The finished set stays in the gallery.
                 setIsRestored(false);
                 setInputMode(null);
                 setAppStep(AppStep.UPLOAD);
                 return;
             }
-            // Individual mode has no sheet to return to
+            // Step back into the (populated) previous step so the user can
+            // edit. Keep finalStickers/package so returning forward doesn't
+            // force a regeneration — a real edit + re-run replaces them.
             setAppStep(rawSheetUrls.length > 0 ? AppStep.SHEET_EDITOR : AppStep.STICKER_CONFIG);
-            setFinalStickers([]);
-            setStickerPackageInfo(null);
         }
+    };
+
+    // Home is a separate action from Back: return to the start screen without
+    // reloading (keeps the gallery + remembered key), so Back stays a pure
+    // step-back for editing.
+    const handleGoHome = () => {
+        setInputMode(null);
+        setIsRestored(false);
+        setAppStep(AppStep.UPLOAD);
     };
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1523,15 +1553,25 @@ export const App = () => {
 
             <main className="max-w-7xl mx-auto p-6 pt-10">
                 {appStep > AppStep.UPLOAD && (
-                    <button
-                        onClick={handleBack}
-                        className={`mb-6 flex items-center font-bold transition-colors gap-2 px-4 py-2 rounded-full group ${theme === 'dark' ? 'text-indigo-200 hover:bg-white/10' : 'text-slate-500 hover:text-indigo-600 hover:bg-white'}`}
-                    >
-                        <div className={`p-1.5 rounded-full shadow-sm group-hover:shadow border transition-all ${theme === 'dark' ? 'bg-white/10 border-white/20 group-hover:border-indigo-400' : 'bg-white border-slate-200 group-hover:border-indigo-200'}`}>
-                            <ArrowLeftIcon />
-                        </div>
-                        <span>{t('backStep')}</span>
-                    </button>
+                    <div className="mb-6 flex items-center gap-2">
+                        <button
+                            onClick={handleBack}
+                            className={`flex items-center font-bold transition-colors gap-2 px-4 py-2 rounded-full group ${theme === 'dark' ? 'text-indigo-200 hover:bg-white/10' : 'text-slate-500 hover:text-indigo-600 hover:bg-white'}`}
+                        >
+                            <div className={`p-1.5 rounded-full shadow-sm group-hover:shadow border transition-all ${theme === 'dark' ? 'bg-white/10 border-white/20 group-hover:border-indigo-400' : 'bg-white border-slate-200 group-hover:border-indigo-200'}`}>
+                                <ArrowLeftIcon />
+                            </div>
+                            <span>{t('backStep')}</span>
+                        </button>
+                        <button
+                            onClick={handleGoHome}
+                            className={`flex items-center font-bold transition-colors gap-1.5 px-4 py-2 rounded-full ${theme === 'dark' ? 'text-zinc-400 hover:text-white hover:bg-white/10' : 'text-slate-400 hover:text-indigo-600 hover:bg-white'}`}
+                            title={t('goHome')}
+                        >
+                            <HomeIcon className="h-4 w-4" />
+                            <span className="hidden sm:inline">{t('goHome')}</span>
+                        </button>
+                    </div>
                 )}
 
                 {appStep === AppStep.UPLOAD && (

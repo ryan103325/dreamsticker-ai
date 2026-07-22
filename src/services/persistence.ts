@@ -1,4 +1,4 @@
-import { GeneratedImage, StickerPackageInfo, StickerType } from '../types';
+import { GeneratedImage, StickerPackageInfo, StickerType, StickerConfig } from '../types';
 
 /**
  * Local work persistence via IndexedDB.
@@ -32,6 +32,15 @@ export interface SavedWork {
     stickerPackageInfo: StickerPackageInfo | null;
     zipFileName: string;
     mainStickerId: string | null;
+    /** Editable upstream state, so restoring a work can step back through the
+     *  flow and edit instead of dead-ending on empty screens. Absent in
+     *  pre-v2 saves (those restore as a view-only finished set). */
+    generatedChar?: GeneratedImage | null;
+    rawSheetUrls?: string[];
+    stickerConfigs?: StickerConfig[];
+    inputMode?: string | null;
+    stickerQuantity?: number;
+    genMode?: 'SHEET' | 'INDIVIDUAL';
 }
 
 export const newWorkId = (): string => {
