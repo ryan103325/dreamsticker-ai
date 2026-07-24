@@ -26,7 +26,7 @@ import { processGreenScreenAndSlice, waitForOpenCV } from './services/opencvServ
 import { Loader } from './components/Loader';
 import { MagicEditor } from './components/MagicEditor';
 import { HelpModal } from './components/HelpModal';
-import { UploadIcon, MagicWandIcon, StickerIcon, DownloadIcon, RefreshIcon, EditIcon, CloseIcon, HelpIcon, StarIcon, CopyIcon, ExternalLinkIcon, FolderOpenIcon, DiceIcon, TrashIcon, ArrowLeftIcon, CameraIcon, ImageIcon, TypeIcon, FolderIcon, ChevronDownIcon, CheckIcon, HomeIcon } from './components/Icons';
+import { UploadIcon, MagicWandIcon, StickerIcon, DownloadIcon, RefreshIcon, EditIcon, CloseIcon, HelpIcon, StarIcon, CopyIcon, ExternalLinkIcon, FolderOpenIcon, DiceIcon, TrashIcon, ArrowLeftIcon, CameraIcon, ImageIcon, TypeIcon, FolderIcon, ChevronDownIcon, CheckIcon, HomeIcon, SunIcon, MoonIcon, KeyIcon, GlobeIcon } from './components/Icons';
 import { LandingPage } from './components/LandingPage';
 import { WorksGallery } from './components/WorksGallery';
 import { loadApiKey, clearApiKey } from './services/storageUtils';
@@ -344,7 +344,7 @@ const ExternalPromptGenerator = ({ onApply, isProcessing, characterType }: { onA
                         <textarea
                             readOnly
                             value={generatePrompt()}
-                            className="w-full h-24 p-2 text-[10px] bg-white border border-slate-200 rounded-lg resize-none text-slate-500 font-mono focus:outline-none"
+                            className="w-full h-24 p-2 text-[10px] bg-white border border-slate-200 rounded-lg resize-none text-slate-500 font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
                         />
                         <div className="absolute bottom-2 right-2">
                             <CopyBtn text={generatePrompt()} label="複製 Prompt" />
@@ -1484,21 +1484,24 @@ export const App = () => {
                         onClick={toggleTheme}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20 border border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'}`}
                         title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                        aria-label={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
                     >
-                        {theme === 'dark' ? '☀️' : '🌙'}
+                        {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
                     </button>
                     <button
                         onClick={() => setSysLang(sysLang === 'zh' ? 'en' : 'zh')}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20 border border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'}`}
+                        aria-label={sysLang === 'zh' ? 'Switch to English' : '切換為中文'}
                     >
-                        <span>🌐</span> {sysLang === 'zh' ? 'EN' : '中'}
+                        <GlobeIcon /> {sysLang === 'zh' ? 'EN' : '中'}
                     </button>
                     <button
                         onClick={() => setGalleryOpen(true)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20 border border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'}`}
                         title={t('galleryTitle')}
+                        aria-label={t('galleryTitle')}
                     >
-                        <span>🖼️</span>
+                        <ImageIcon className="h-4 w-4" />
                         <span className="hidden sm:inline">{t('galleryTitle')}</span>
                         {works.length > 0 && <span className="ml-0.5 min-w-4 px-1 rounded-full bg-indigo-500 text-white text-[10px] leading-4 text-center">{works.length}</span>}
                     </button>
@@ -1506,10 +1509,11 @@ export const App = () => {
                         onClick={handleChangeKey}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all hidden sm:flex items-center gap-1 ${theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20 border border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'}`}
                         title={t('changeKey')}
+                        aria-label={t('changeKey')}
                     >
-                        🔑
+                        <KeyIcon />
                     </button>
-                    <button onClick={() => setHelpOpen(true)} className={`p-2 rounded-full transition-colors ${theme === 'dark' ? 'text-indigo-300 hover:bg-white/10' : 'hover:bg-indigo-50 text-indigo-600'}`}>
+                    <button onClick={() => setHelpOpen(true)} aria-label={t('help')} title={t('help')} className={`p-2 rounded-full transition-colors ${theme === 'dark' ? 'text-indigo-300 hover:bg-white/10' : 'hover:bg-indigo-50 text-indigo-600'}`}>
                         <HelpIcon />
                     </button>
                 </div>
@@ -2274,7 +2278,7 @@ export const App = () => {
 
                 {
                     appStep === AppStep.SHEET_EDITOR && rawSheetUrls.length > 0 && (
-                        <div className="animate-fade-in-up mt-2 h-[calc(100vh-140px)] flex flex-col">
+                        <div className="animate-fade-in-up mt-2 h-[calc(100dvh-140px)] flex flex-col">
                             {/* ... (Sheet Editor code remains same) ... */}
                             <div className="flex justify-between items-center mb-4 px-2">
                                 <h2 className="text-2xl font-black text-slate-800">{t('sheetCheckTitle')} 🛠️</h2>

@@ -159,6 +159,7 @@ export const translations = {
         undo: "復原",
         save: "儲存",
         cancel: "取消",
+        close: "關閉",
 
         // Pack
         packTitle: "上架打包資訊",
@@ -226,6 +227,7 @@ export const translations = {
         artStyle_ghibli: "吉卜力風(畫風設定：手繪質感，宮崎駿風格，色彩飽滿自然，背景夢幻精緻。)",
 
         // Help Modal
+        help: "使用說明",
         helpTitle: "DreamSticker AI 使用手冊",
         helpSubtitle: "從 0 到 1 打造您的專屬貼圖完整教學",
         helpTabStart: "1. 開始模式選擇",
@@ -549,6 +551,7 @@ export const translations = {
         undo: "Undo",
         save: "Save",
         cancel: "Cancel",
+        close: "Close",
 
         // Pack
         packTitle: "Packaging Info",
@@ -616,6 +619,7 @@ export const translations = {
         artStyle_ghibli: "Ghibli Style (Style: Hand-painted, Miyazaki, Dreamy)",
 
         // Help Modal
+        help: "Help",
         helpTitle: "DreamSticker AI Manual",
         helpSubtitle: "Complete guide to creating your sticker pack",
         helpTabStart: "1. Start",

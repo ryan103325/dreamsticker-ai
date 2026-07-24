@@ -347,7 +347,7 @@ export const MagicEditor: React.FC<MagicEditorProps> = ({
                                 value={prompt} 
                                 onChange={e => setPrompt(e.target.value)} 
                                 placeholder="請具體描述紅色區域要改成什麼... (例如：換成藍色衣服、拿著愛心、改成閉眼睛)" 
-                                className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-100 rounded-2xl h-36 text-sm focus:ring-0 outline-none resize-none font-medium text-slate-700 shadow-inner transition-all" 
+                                className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-100 rounded-2xl h-36 text-sm outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 resize-none font-medium text-slate-700 shadow-inner transition-all"
                             />
                             <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100">
                                 <p className="text-[11px] text-indigo-700 leading-relaxed font-bold">
